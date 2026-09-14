@@ -37,7 +37,7 @@ try {
     $runDir = $null
     $lockStarted = $false
     while ((Get-Date) -lt $deadline) {
-        $runDir = Get-ChildItem -LiteralPath results -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin $before } | Sort-Object Name -Descending | Select-Object -First 1
+        $runDir = Get-ChildItem -LiteralPath results -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d{8}T\d{6}\.\d{9}Z$' -and $_.Name -notin $before } | Sort-Object Name -Descending | Select-Object -First 1
         if ($runDir -and (Test-Path -LiteralPath (Join-Path $runDir.FullName 'summary.json'))) { break }
         if ($Scenario -eq 'db-lock' -and !$lockStarted) {
             $q = [Uri]::EscapeDataString('bench_phase{phase="measure"}')
@@ -61,8 +61,8 @@ try {
     if ($lockJob) { $lockJob | Wait-Job | Receive-Job -ErrorAction Stop }
     $path = $runDir.FullName
     $summary = Get-Content -Raw (Join-Path $path 'summary.json') | ConvertFrom-Json
-    $start = ([DateTimeOffset]::Parse($summary.Started)).ToUnixTimeSeconds()
-    $end = ([DateTimeOffset]::Parse($summary.Finished)).ToUnixTimeSeconds()
+    $start = ([DateTimeOffset]::Parse($summary.MeasurementStarted)).ToUnixTimeSeconds()
+    $end = ([DateTimeOffset]::Parse($summary.MeasurementFinished)).ToUnixTimeSeconds()
     $revision = & git rev-parse HEAD
     $dirty = & git status --porcelain
     $dockerInfo = & docker info --format '{{json .}}' | ConvertFrom-Json

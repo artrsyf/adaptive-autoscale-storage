@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -61,16 +62,18 @@ type result struct {
 	Seconds   float64   `json:"seconds"`
 }
 type summary struct {
-	Started    time.Time
-	Finished   time.Time
-	Completed  int
-	Success    int
-	Conflicts  int
-	Errors     int
-	Dropped    int64
-	P50Seconds float64
-	P95Seconds float64
-	P99Seconds float64
+	Started             time.Time
+	Finished            time.Time
+	MeasurementStarted  time.Time
+	MeasurementFinished time.Time
+	Completed           int
+	Success             int
+	Conflicts           int
+	Errors              int
+	Dropped             int64
+	P50Seconds          float64
+	P95Seconds          float64
+	P99Seconds          float64
 }
 
 func run() error {
@@ -136,7 +139,9 @@ func run() error {
 	var mu sync.Mutex
 	var samples []float64
 	s := summary{Started: start}
-	encoder := json.NewEncoder(f)
+	buffer := bufio.NewWriterSize(f, 256*1024)
+	defer buffer.Flush()
+	encoder := json.NewEncoder(buffer)
 	var writeErr error
 	call := func(p, op string, command document.Command) (document.Record, int) {
 		var record document.Record
@@ -224,6 +229,9 @@ func run() error {
 	}{{"warmup", c.Warmup}, {"measure", c.Duration}} {
 		setPhase(p.name)
 		begin := time.Now()
+		if p.name == "measure" {
+			s.MeasurementStarted = begin.UTC()
+		}
 		next := begin
 		end := begin.Add(p.duration)
 		for next.Before(end) && ctx.Err() == nil {
@@ -295,6 +303,9 @@ func run() error {
 			next = next.Add(interval)
 		}
 		wg.Wait()
+		if p.name == "measure" {
+			s.MeasurementFinished = time.Now().UTC()
+		}
 	}
 	offered.Set(0)
 	setPhase("finished")
@@ -315,6 +326,12 @@ func run() error {
 	}
 	if writeErr != nil {
 		return writeErr
+	}
+	if err := buffer.Flush(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
 	}
 	data, _ := json.MarshalIndent(s, "", "  ")
 	if e := os.WriteFile(filepath.Join(dir, "summary.json"), data, 0644); e != nil {
