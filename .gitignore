@@ -1,0 +1,6 @@
+.env
+.cache/
+bin/
+results/
+*.exe
+coverage.out
