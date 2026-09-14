@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The repository currently contains two design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read their explicitly designated canonical updates before implementing features; earlier sections retain superseded sequencing.
+The repository currently contains design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read `docs/first-epic-contract.md` for the agreed initial scope and implementation plan, then the canonical roadmap updates; earlier sections retain superseded sequencing.
 
 As implementation begins, organize Go entry points under `cmd/`, private packages under `internal/`, database migrations under `migrations/`, and load scenarios under `benchmarks/`. Keep deployment and observability configuration under `deploy/`. These are proposed conventions, not existing directories.
 
@@ -36,4 +36,4 @@ Use one branch per epic, named `epic/<number>-<short-name>`. Commit changes with
 
 ## Local Execution & Design Decisions
 
-Before starting the local stack, ask the user to enable WSL2. Use modest, explicit resource limits and calibrate load experimentally; smaller limits alone do not establish representative results. Ensure the load generator and monitoring stack have sufficient headroom. Data schema, concurrent-write semantics, and future Scala DSL deployment remain open decisions: discuss and document them before implementing dependent behavior.
+Before starting the local stack, ask the user to enable WSL2. Use modest, explicit resource limits and calibrate load experimentally; smaller limits alone do not establish representative results. Ensure the load generator and monitoring stack have sufficient headroom. The initial document model and conditional writes are recorded in `docs/first-epic-contract.md`. Future Scala DSL deployment remains an open decision.
