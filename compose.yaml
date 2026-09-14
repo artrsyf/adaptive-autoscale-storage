@@ -1,0 +1,174 @@
+name: autoscale-storage
+
+x-pu: &pu
+  build: .
+  image: autoscale-storage:local
+  cpus: 0.5
+  mem_limit: 192m
+  environment: &pu-env
+    ROLE: pu
+    DATABASE_URL: postgres://storage:local-development@postgres:5432/storage?sslmode=disable
+    NODES: ${NODES:-pu-1=http://pu-1:8080,pu-2=http://pu-2:8080,pu-3=http://pu-3:8080}
+    POOL_MAX: ${POOL_MAX:-8}
+    PARTITIONS: 128
+    ASSIGNMENT_EPOCH: 1
+    MAX_INFLIGHT: 64
+    GOMEMLIMIT: 140MiB
+    GOMAXPROCS: 1
+  depends_on:
+    postgres: {condition: service_healthy}
+  healthcheck:
+    test: [CMD, wget, -q, -O, /dev/null, http://localhost:8080/readyz]
+    interval: 5s
+    timeout: 2s
+    retries: 12
+  stop_grace_period: 15s
+
+services:
+  tests:
+    build:
+      context: .
+      target: test
+    profiles: [test]
+    environment:
+      TEST_DATABASE_URL: postgres://storage:local-development@postgres:5432/storage?sslmode=disable
+    depends_on:
+      postgres: {condition: service_healthy}
+  postgres:
+    image: postgres:17.6-bookworm
+    cpus: ${POSTGRES_CPUS:-1.0}
+    mem_limit: 768m
+    shm_size: 128m
+    environment:
+      POSTGRES_USER: storage
+      POSTGRES_PASSWORD: local-development
+      POSTGRES_DB: storage
+    command: [postgres, -c, shared_preload_libraries=pg_stat_statements, -c, track_io_timing=on, -c, track_wal_io_timing=on, -c, max_connections=80, -c, shared_buffers=128MB]
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./migrations/001_documents.sql:/docker-entrypoint-initdb.d/001_documents.sql:ro
+      - ./deploy/postgres/002_monitoring.sql:/docker-entrypoint-initdb.d/002_monitoring.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U storage -d storage"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+  pu-1:
+    <<: *pu
+    environment:
+      <<: *pu-env
+      NODE_ID: pu-1
+  pu-2:
+    <<: *pu
+    profiles: [multi]
+    environment:
+      <<: *pu-env
+      NODE_ID: pu-2
+  pu-3:
+    <<: *pu
+    profiles: [multi]
+    environment:
+      <<: *pu-env
+      NODE_ID: pu-3
+  router:
+    build: .
+    image: autoscale-storage:local
+    cpus: 0.5
+    mem_limit: 192m
+    environment:
+      ROLE: router
+      NODE_ID: router
+      NODES: ${NODES:-pu-1=http://pu-1:8080,pu-2=http://pu-2:8080,pu-3=http://pu-3:8080}
+      PARTITIONS: 128
+      ASSIGNMENT_EPOCH: 1
+      MAX_INFLIGHT: 192
+      REQUEST_TIMEOUT_MS: 4000
+      GOMEMLIMIT: 140MiB
+      GOMAXPROCS: 1
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      pu-1: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://localhost:8080/readyz]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+    stop_grace_period: 15s
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    cpus: 0.25
+    mem_limit: 128m
+    environment:
+      DATA_SOURCE_NAME: postgres://monitor:local-monitor@postgres:5432/storage?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes: ["./deploy/postgres/queries.yaml:/etc/postgres-exporter/queries.yaml:ro"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.55.1
+    cpus: 0.5
+    mem_limit: 256m
+    privileged: true
+    command: [--docker_only=true, --housekeeping_interval=5s, --store_container_labels=true]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    cpus: 0.5
+    mem_limit: 512m
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=24h]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+  grafana:
+    image: grafana/grafana:12.1.1
+    cpus: 0.5
+    mem_limit: 256m
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/storage.json
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+  load:
+    image: autoscale-storage:local
+    build: .
+    profiles: [bench]
+    entrypoint: [load]
+    # Root only for bind-mounted result files on Docker Desktop.
+    user: "0:0"
+    cpus: 2
+    mem_limit: 384m
+    environment:
+      TARGET: http://router:8080
+      SCENARIO: ${SCENARIO:-constant}
+      DISTRIBUTION: ${DISTRIBUTION:-uniform}
+      RATE: ${RATE:-100}
+      DURATION: ${DURATION:-60s}
+      WARMUP: ${WARMUP:-10s}
+      READ_PERCENT: ${READ_PERCENT:-80}
+      SEED: ${SEED:-42}
+      RECORDS: ${RECORDS:-4096}
+      PAYLOAD_BYTES: ${PAYLOAD_BYTES:-1024}
+      WORKERS: ${WORKERS:-128}
+      OUTPUT: /results
+      GOMEMLIMIT: 280MiB
+      GOMAXPROCS: 2
+    volumes: ["./results:/results"]
+    depends_on:
+      router: {condition: service_healthy}
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  grafana-data:

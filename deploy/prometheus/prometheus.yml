@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+scrape_configs:
+  - job_name: router
+    static_configs:
+      - targets: [router:8080]
+  - job_name: pu
+    dns_sd_configs:
+      - names: [pu-1, pu-2, pu-3]
+        type: A
+        port: 8080
+        refresh_interval: 5s
+  - job_name: postgres
+    static_configs:
+      - targets: [postgres-exporter:9187]
+  - job_name: containers
+    static_configs:
+      - targets: [cadvisor:8080]
+  - job_name: load
+    dns_sd_configs:
+      - names: [load]
+        type: A
+        port: 9091
+        refresh_interval: 5s
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
