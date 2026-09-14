@@ -32,4 +32,8 @@ Use Go's standard testing package; no framework or coverage threshold is establi
 
 ## Commit & Pull Request Guidelines
 
-No Git history is available to establish existing conventions. Use concise imperative commits, optionally prefixed with `docs:`, `feat:`, or `fix:`. PRs should explain behavior, scope, validation commands and results, and unresolved limitations. Include dashboard screenshots for visualization changes. Keep credentials out of tracked configuration.
+Use one branch per epic, named `epic/<number>-<short-name>`. Commit changes within that branch and include the feature number and name, for example `docs: Feature 0.1 — Formal system model`. Merge into `master` only after every epic requirement and its validation are complete. PRs should explain behavior, scope, validation results, and unresolved limitations. Include dashboard screenshots for visualization changes. Keep credentials out of tracked configuration.
+
+## Local Execution & Design Decisions
+
+Before starting the local stack, ask the user to enable WSL2. Use modest, explicit resource limits and calibrate load experimentally; smaller limits alone do not establish representative results. Ensure the load generator and monitoring stack have sufficient headroom. Data schema, concurrent-write semantics, and future Scala DSL deployment remain open decisions: discuss and document them before implementing dependent behavior.
