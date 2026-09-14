@@ -1,0 +1,35 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+
+The repository currently contains two design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read their explicitly designated canonical updates before implementing features; earlier sections retain superseded sequencing.
+
+As implementation begins, organize Go entry points under `cmd/`, private packages under `internal/`, database migrations under `migrations/`, and load scenarios under `benchmarks/`. Keep deployment and observability configuration under `deploy/`. These are proposed conventions, not existing directories.
+
+## Architecture & Scope
+
+The planned data plane uses Go processing units (PUs) backed by authoritative PostgreSQL storage. The immediate priority is a locally runnable Docker Compose baseline with load tests, Prometheus metrics, and provisioned Grafana dashboards showing load distribution and database pressure.
+
+Preserve boundaries between request handling, routing, partition assignment, and persistence. Future Scala control-plane and query-DSL integrations should use explicit contracts. Logical partition ownership does not imply physical PostgreSQL sharding. Defer Kafka, Redis, Kubernetes, and automatic scaling until their planned stages.
+
+## Build, Test, and Development Commands
+
+No build or test commands are currently configured. Once the Go module and Compose configuration exist, document and verify these expected commands:
+
+- `go build ./...`: compile Go packages.
+- `go test ./...`: run Go tests.
+- `go vet ./...`: check common correctness issues.
+- `docker compose up --build`: build and start the local stack.
+- `docker compose down`: stop the stack; avoid `-v` unless deleting persisted data is intended.
+
+## Coding Style & Naming Conventions
+
+Use `gofmt` for Go formatting, idiomatic package names, and descriptive exported identifiers. Name Go tests `*_test.go` with `TestXxx` functions. Use versioned, ordered migration filenames. Keep metric labels bounded; never label metrics with record IDs, raw SQL, or arbitrary URLs.
+
+## Testing Guidelines
+
+Use Go's standard testing package; no framework or coverage threshold is established. Test routing, concurrent writes, cancellation, and database failures as implemented. Separate integration tests from reproducible load scenarios. Record workload settings, resource limits, warm-up, throughput, errors, and latency. Measure pool acquisition separately from database execution; never report unexecuted benchmarks as results.
+
+## Commit & Pull Request Guidelines
+
+No Git history is available to establish existing conventions. Use concise imperative commits, optionally prefixed with `docs:`, `feat:`, or `fix:`. PRs should explain behavior, scope, validation commands and results, and unresolved limitations. Include dashboard screenshots for visualization changes. Keep credentials out of tracked configuration.
