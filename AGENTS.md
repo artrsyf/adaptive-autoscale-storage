@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The repository currently contains design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read `docs/first-epic-contract.md` for the agreed initial scope and implementation plan, then the canonical roadmap updates; earlier sections retain superseded sequencing.
+The repository currently contains design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read `docs/first-epic-contract.md` for the initial scope and implementation plan, then the canonical roadmap updates; earlier sections retain superseded sequencing. Document selected decisions and their rationale without references to user discussions or approvals.
 
 As implementation begins, organize Go entry points under `cmd/`, private packages under `internal/`, database migrations under `migrations/`, and load scenarios under `benchmarks/`. Keep deployment and observability configuration under `deploy/`. These are proposed conventions, not existing directories.
 
