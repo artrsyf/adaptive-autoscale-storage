@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The repository currently contains two design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read their explicitly designated canonical updates before implementing features; earlier sections retain superseded sequencing.
+The repository currently contains design and roadmap documents in `docs/`; application code, tests, and deployment configuration do not yet exist. Read `docs/first-epic-contract.md` for the initial scope and implementation plan, then the canonical roadmap updates; earlier sections retain superseded sequencing. Document selected decisions and their rationale without references to user discussions or approvals.
 
 As implementation begins, organize Go entry points under `cmd/`, private packages under `internal/`, database migrations under `migrations/`, and load scenarios under `benchmarks/`. Keep deployment and observability configuration under `deploy/`. These are proposed conventions, not existing directories.
 
@@ -32,4 +32,8 @@ Use Go's standard testing package; no framework or coverage threshold is establi
 
 ## Commit & Pull Request Guidelines
 
-No Git history is available to establish existing conventions. Use concise imperative commits, optionally prefixed with `docs:`, `feat:`, or `fix:`. PRs should explain behavior, scope, validation commands and results, and unresolved limitations. Include dashboard screenshots for visualization changes. Keep credentials out of tracked configuration.
+Use one branch per epic, named `epic/<number>-<short-name>`. Commit changes within that branch and include the feature number and name, for example `docs: Feature 0.1 — Formal system model`. Merge into `master` only after every epic requirement and its validation are complete. PRs should explain behavior, scope, validation results, and unresolved limitations. Include dashboard screenshots for visualization changes. Keep credentials out of tracked configuration.
+
+## Local Execution & Design Decisions
+
+Before starting the local stack, ask the user to enable WSL2. Use modest, explicit resource limits and calibrate load experimentally; smaller limits alone do not establish representative results. Ensure the load generator and monitoring stack have sufficient headroom. The initial document model and conditional writes are recorded in `docs/first-epic-contract.md`. Future Scala DSL deployment remains an open decision.
