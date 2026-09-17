@@ -20,8 +20,6 @@ import (
 	"syscall"
 	"time"
 
-	"autoscale-distr-storage/internal/document"
-	"autoscale-distr-storage/internal/topology"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -143,8 +141,8 @@ func run() error {
 	defer buffer.Flush()
 	encoder := json.NewEncoder(buffer)
 	var writeErr error
-	call := func(p, op string, command document.Command) (document.Record, int) {
-		var record document.Record
+	call := func(p, op string, command commandDTO) (recordDTO, int) {
+		var record recordDTO
 		data, _ := json.Marshal(command)
 		req, _ := http.NewRequestWithContext(ctx, "POST", c.Target+"/"+op, strings.NewReader(string(data)))
 		req.Header.Set("Content-Type", "application/json")
@@ -184,12 +182,11 @@ func run() error {
 		mu.Unlock()
 		return record, status
 	}
-	a, _ := topology.Parse("pu=http://unused", 128, "1")
 	keys := make([]string, c.Records)
 	var hot []int
 	for i := range keys {
 		keys[i] = fmt.Sprintf("bench-%d", i)
-		if a.Partition(keys[i]) == 0 {
+		if partition(keys[i]) == 0 {
 			hot = append(hot, i)
 		}
 	}
@@ -203,13 +200,13 @@ func run() error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		command := document.Command{PartitionKey: key, ID: "record", Payload: payload}
+		command := commandDTO{PartitionKey: key, ID: "record", Payload: payload}
 		_, code := call("seed", "create", command)
 		if code != 201 && code != 409 {
 			return fmt.Errorf("seed %d status %d", i, code)
 		}
 		if code == 409 {
-			record, status := call("seed", "get", document.Command{PartitionKey: key, ID: "record"})
+			record, status := call("seed", "get", commandDTO{PartitionKey: key, ID: "record"})
 			if status != 200 {
 				return fmt.Errorf("seed read %d status %d", i, status)
 			}
@@ -286,7 +283,7 @@ func run() error {
 				go func(p string, i int, read bool) {
 					defer wg.Done()
 					defer func() { <-slots; active.Dec() }()
-					command := document.Command{PartitionKey: keys[i], ID: "record"}
+					command := commandDTO{PartitionKey: keys[i], ID: "record"}
 					record, code := call(p, "get", command)
 					if !read && code == 200 {
 						command.Payload = payload
@@ -337,7 +334,10 @@ func run() error {
 	if e := os.WriteFile(filepath.Join(dir, "summary.json"), data, 0644); e != nil {
 		return e
 	}
-	metrics := httptestMetrics(registry)
+	metrics, err := snapshotMetrics(registry)
+	if err != nil {
+		return err
+	}
 	if e := os.WriteFile(filepath.Join(dir, "metrics.prom"), metrics, 0644); e != nil {
 		return e
 	}

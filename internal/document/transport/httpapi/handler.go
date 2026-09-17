@@ -10,15 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"autoscale-distr-storage/internal/document"
-	"autoscale-distr-storage/internal/telemetry"
-	"autoscale-distr-storage/internal/topology"
+	"autoscale-distr-storage/internal/document/domain"
+	"autoscale-distr-storage/internal/platform/telemetry"
 )
 
 type Handler struct {
-	Executor   document.Executor
+	Executor   Executor
 	Metrics    *telemetry.Metrics
-	Assignment *topology.Assignment
+	Assignment Assignment
 	NodeID     string // Empty for router.
 	Timeout    time.Duration
 	MaxBody    int64
@@ -35,7 +34,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	status := http.StatusOK
 	op := strings.TrimPrefix(r.URL.Path, "/")
-	if !document.ValidOperation(op) {
+	if !validOperation(op) {
 		op = "unknown"
 	}
 	defer func() {
@@ -53,7 +52,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, h.MaxBody)
-	var c document.Command
+	var c Request
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
 	if err := d.Decode(&c); err != nil {
@@ -74,13 +73,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if c.Validate(op) != nil {
+	if c.validate(op) != nil {
 		fail(400, "invalid_request")
 		return
 	}
 	partition := h.Assignment.Partition(c.PartitionKey)
 	if h.NodeID != "" {
-		if r.Header.Get("X-Assignment-Epoch") != h.Assignment.Epoch || h.Assignment.Owner(partition).ID != h.NodeID {
+		if r.Header.Get("X-Assignment-Epoch") != h.Assignment.Version() || h.Assignment.Owner(partition).ID != h.NodeID {
 			fail(409, "wrong_assignment")
 			return
 		}

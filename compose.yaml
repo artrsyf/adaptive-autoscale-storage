@@ -28,7 +28,7 @@ services:
   tests:
     build:
       context: .
-      target: test
+      dockerfile: deploy/Dockerfile.test
     profiles: [test]
     environment:
       TEST_DATABASE_URL: postgres://storage:local-development@postgres:5432/storage?sslmode=disable
@@ -141,8 +141,8 @@ services:
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
   load:
-    image: autoscale-storage:local
-    build: .
+    image: autoscale-load:local
+    build: ./benchmarks/load
     profiles: [bench]
     entrypoint: [load]
     # Root only for bind-mounted result files on Docker Desktop.

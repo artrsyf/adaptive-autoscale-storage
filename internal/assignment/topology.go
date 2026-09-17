@@ -1,5 +1,5 @@
 // Package topology implements immutable static assignments, not dynamic fencing.
-package topology
+package assignment
 
 import (
 	"crypto/sha256"
@@ -46,3 +46,5 @@ func (a *Assignment) Partition(key string) int {
 	return int(binary.BigEndian.Uint64(h[:8]) % uint64(a.Partitions))
 }
 func (a *Assignment) Owner(partition int) Node { return a.Nodes[partition%len(a.Nodes)] }
+
+func (a *Assignment) Version() string { return a.Epoch }

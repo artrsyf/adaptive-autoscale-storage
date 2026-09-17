@@ -4,13 +4,13 @@
 
 Read `docs/first-epic-contract.md` and the canonical roadmap updates. Earlier roadmap sections retain superseded sequencing. Document decisions and rationale without references to discussions or approvals.
 
-Entry points: `cmd/storage/` and `cmd/load/`. Packages and colocated tests: `internal/`. Initial SQL: `migrations/`. Experiments: `benchmarks/`. Deployment and dashboards: `compose.yaml` and `deploy/`. Generated results belong in ignored `results/`.
+Application entry point: `cmd/storage/`; composition: `internal/app/`. Domain slices live in `internal/document/{domain,service,repository,transport}/`; assignment is separate. Tests are colocated. The independent benchmark Go module and image live in `benchmarks/load/`. Initial SQL: `migrations/`. Experiments: `benchmarks/`. Deployment and dashboards: `compose.yaml` and `deploy/`. Generated results belong in ignored `results/`.
 
 ## Architecture & Scope
 
 Go processing units (PUs) use authoritative PostgreSQL storage. Docker Compose provides a local baseline with load tests, Prometheus, and provisioned Grafana dashboards.
 
-Separate request handling, routing, assignment, and persistence. Future Scala integrations use explicit contracts. Logical ownership is not physical sharding. Defer Kafka, Redis, Kubernetes, and autoscaling until their planned stages.
+Keep domain models and concrete use-case services independent of HTTP, PostgreSQL, and Prometheus. Define narrow dependency interfaces at their consumers; repository ports describe atomic persistence guarantees. Keep wire DTOs in transport adapters. Never import application internals from benchmark clients or run tests/workloads from application startup. Future Scala integrations use explicit contracts. Logical ownership is not physical sharding. Defer Kafka, Redis, Kubernetes, and autoscaling until their planned stages.
 
 ## Build, Test, and Development Commands
 
@@ -19,6 +19,7 @@ Use the pinned Go toolchain and Docker Desktop with Linux containers:
 - `go build ./...`: compile Go packages.
 - `go test ./...`: run Go tests.
 - `go vet ./...`: check common correctness issues.
+- `go -C benchmarks/load test ./...`: test the independent workload client.
 - `docker compose up -d --build --wait`: start the stack after copying `.env.example` to `.env`.
 - `docker compose --profile test run --build --rm tests`: run race and PostgreSQL integration tests.
 - `./benchmarks/run.ps1 -Scenario constant -Rate 100`: run and archive an experiment.

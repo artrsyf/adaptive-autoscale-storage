@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-
-	"autoscale-distr-storage/internal/document"
-	"autoscale-distr-storage/internal/topology"
 )
 
 type UpstreamError struct {
@@ -19,13 +16,18 @@ type UpstreamError struct {
 
 func (e *UpstreamError) Error() string { return fmt.Sprintf("upstream %d: %s", e.Status, e.Code) }
 
-type Router struct {
-	Assignment *topology.Assignment
-	Client     *http.Client
+// HTTPClient is the outbound transport dependency consumed by the forwarding adapter.
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
-func (r *Router) Execute(ctx context.Context, op string, c document.Command) (document.Record, error) {
-	var record document.Record
+type Router struct {
+	Assignment Assignment
+	Client     HTTPClient
+}
+
+func (r *Router) Execute(ctx context.Context, op string, c Request) (Response, error) {
+	var record Response
 	data, err := json.Marshal(c)
 	if err != nil {
 		return record, err
@@ -36,7 +38,7 @@ func (r *Router) Execute(ctx context.Context, op string, c document.Command) (do
 		return record, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Assignment-Epoch", r.Assignment.Epoch)
+	req.Header.Set("X-Assignment-Epoch", r.Assignment.Version())
 	resp, err := r.Client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {

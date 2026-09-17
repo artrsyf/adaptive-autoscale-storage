@@ -1,4 +1,4 @@
-package topology
+package assignment
 
 import "testing"
 

@@ -2,6 +2,16 @@
 
 Локальный исследовательский стенд: **HTTP Router → Go PU → PostgreSQL**, с документным API, статическими логическими разделами и наблюдаемостью. Архитектура и границы эпика: [docs/first-epic-contract.md](docs/first-epic-contract.md).
 
+## Структура кода
+
+- `cmd/storage` — запуск; `internal/app` — сборка зависимостей и жизненный цикл.
+- `internal/document/domain` — модель и инварианты; `service` — сценарии CRUD и интерфейс репозитория.
+- `internal/document/repository/postgres` — SQL, транзакции, пул; `transport/httpapi` — DTO, хендлеры и forwarding.
+- `internal/assignment` — статическое распределение; `internal/platform/telemetry` — метрики.
+- `benchmarks/load` — отдельный Go-модуль и образ клиента; `deploy/Dockerfile.test` — тестовый образ.
+
+Приложение не запускает тесты или нагрузку. Направление зависимостей и пример update описаны в [архитектуре кода](docs/code-architecture.md).
+
 ## Запуск
 
 Нужны Docker Desktop с WSL2/Linux containers и Docker Compose. Для локальной разработки — Go 1.25.7 (toolchain указан в `go.mod`). Команды выполняются из корня проекта в PowerShell 7.
@@ -69,6 +79,8 @@ Partition = первые 8 байт SHA-256 от UTF-8 `partition_key`, unsigned
 ```powershell
 go test ./...
 go vet ./...
+go -C benchmarks/load test ./...
+go -C benchmarks/load vet ./...
 docker compose --profile test run --build --rm tests
 ./benchmarks/smoke.ps1
 ```
@@ -76,6 +88,8 @@ docker compose --profile test run --build --rm tests
 Команда Compose выполняет тесты с race detector и настоящим PostgreSQL. Без `TEST_DATABASE_URL` локальные интеграционные тесты пропускаются. Проверяются конфликтующие обновления, duplicate create, delete/recreate, отмена и таймаут под блокировкой, маршрутизация и отказ при перегрузке. `smoke.ps1` проверяет публичный API через Router. Вариант `./benchmarks/smoke.ps1 -FailureChecks` дополнительно останавливает и поднимает PostgreSQL, проверяя ошибки, readiness и сохранность записи; запускайте его отдельно от нагрузки.
 
 ## Нагрузочные эксперименты
+
+Генератор собирается отдельно из `benchmarks/load` и обращается к HTTP API. Корневой `go test ./...` не включает этот вложенный модуль. `run.ps1` пересобирает образ генератора перед прогоном.
 
 ```powershell
 ./benchmarks/run.ps1 -Scenario constant -Distribution uniform -Rate 100 -Seconds 60

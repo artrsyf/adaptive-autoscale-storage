@@ -32,7 +32,7 @@ try {
     if ($Nodes -eq 3) { $services += @('pu-2','pu-3') }
     Docker-Checked compose up -d --wait @services
     $before = @(Get-ChildItem -LiteralPath results -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
-    Docker-Checked compose up -d --force-recreate load
+    Docker-Checked compose up -d --build --force-recreate load
     $deadline = (Get-Date).AddSeconds($Seconds + 300)
     $runDir = $null
     $lockStarted = $false

@@ -9,18 +9,18 @@ import (
 	"testing"
 	"time"
 
-	"autoscale-distr-storage/internal/document"
-	"autoscale-distr-storage/internal/telemetry"
-	"autoscale-distr-storage/internal/topology"
+	"autoscale-distr-storage/internal/assignment"
+	"autoscale-distr-storage/internal/document/domain"
+	"autoscale-distr-storage/internal/platform/telemetry"
 )
 
-type executorFunc func(context.Context, string, document.Command) (document.Record, error)
+type executorFunc func(context.Context, string, Request) (Response, error)
 
-func (f executorFunc) Execute(c context.Context, o string, d document.Command) (document.Record, error) {
+func (f executorFunc) Execute(c context.Context, o string, d Request) (Response, error) {
 	return f(c, o, d)
 }
 func TestValidationAndErrors(t *testing.T) {
-	a, _ := topology.Parse("pu-1=http://pu-1:8080", 128, "1")
+	a, _ := assignment.Parse("pu-1=http://pu-1:8080", 128, "1")
 	for _, tc := range []struct {
 		name, body string
 		err        error
@@ -35,8 +35,8 @@ func TestValidationAndErrors(t *testing.T) {
 		{"timeout", `{"partition_key":"a","id":"b"}`, context.DeadlineExceeded, 504},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := &Handler{Assignment: a, Metrics: telemetry.New("router", "router"), MaxBody: 1024, Timeout: time.Second, Slots: make(chan struct{}, 1), Executor: executorFunc(func(context.Context, string, document.Command) (document.Record, error) {
-				return document.Record{}, tc.err
+			h := &Handler{Assignment: a, Metrics: telemetry.New("router", "router"), MaxBody: 1024, Timeout: time.Second, Slots: make(chan struct{}, 1), Executor: executorFunc(func(context.Context, string, Request) (Response, error) {
+				return Response{}, tc.err
 			})}
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, httptest.NewRequest("POST", "/get", strings.NewReader(tc.body)))
@@ -50,7 +50,7 @@ func TestValidationAndErrors(t *testing.T) {
 	}
 }
 func TestOwnershipAndOverload(t *testing.T) {
-	a, _ := topology.Parse("pu-1=http://pu-1:8080", 128, "1")
+	a, _ := assignment.Parse("pu-1=http://pu-1:8080", 128, "1")
 	h := &Handler{Assignment: a, NodeID: "pu-1", Metrics: telemetry.New("pu", "pu-1"), MaxBody: 1024, Timeout: time.Second, Slots: make(chan struct{}, 1)}
 	for _, tc := range []struct {
 		epoch  string
@@ -77,9 +77,9 @@ func TestRouterForwardsOnce(t *testing.T) {
 		Error(w, 409, "revision_conflict")
 	}))
 	defer s.Close()
-	a, _ := topology.Parse("pu-1="+s.URL, 128, "7")
+	a, _ := assignment.Parse("pu-1="+s.URL, 128, "7")
 	r := &Router{a, s.Client()}
-	_, err := r.Execute(context.Background(), "update", document.Command{PartitionKey: "a", ID: "b"})
+	_, err := r.Execute(context.Background(), "update", Request{PartitionKey: "a", ID: "b"})
 	var u *UpstreamError
 	if !errors.As(err, &u) || u.Status != 409 || count != 1 {
 		t.Fatalf("count %d err %v", count, err)
