@@ -1,0 +1,294 @@
+# Имя Compose-проекта; используется фильтрами контейнерных метрик в Grafana.
+name: autoscale-storage
+
+# Common runtime limits. processing unit and Router have separate images, entrypoints and configuration files.
+# Общие ограничения HTTP-приложений; переопределяются конкретным сервисом.
+x-app: &app
+  # Имя и версия образа; local-образы собираются из build.
+  image: autoscale-processing-unit:local
+  # Контекст сборки приложения; context ограничивает доступные Dockerfile исходники.
+  build: {context: ./processing-unit}
+  # Квота CPU контейнера в долях одного ядра.
+  cpus: 0.5
+  # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+  mem_limit: 192m
+  # Переменные процесса; секреты подставляются из локального .env.
+  environment: &go-runtime
+    # Мягкий лимит памяти Go runtime; оставляет запас относительно mem_limit.
+    GOMEMLIMIT: 140MiB
+    # Максимум потоков, одновременно исполняющих Go-код.
+    GOMAXPROCS: "1"
+  # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+  volumes:
+    - ./processing-unit/config.yaml:/etc/storage/config.yaml:ro
+  # Время между сигналом остановки и принудительным завершением контейнера.
+  stop_grace_period: 15s
+  # Проверка готовности, используемая --wait и зависимостями сервисов.
+  healthcheck:
+    # Команда проверки; CMD-SHELL раскрывает переменные окружения внутри контейнера.
+    test: [CMD, wget, -q, -O, /dev/null, "http://localhost:8080/readyz"]
+    # Период запуска healthcheck.
+    interval: 5s
+    # Максимальная длительность одной проверки.
+    timeout: 2s
+    # Число последовательных ошибок до состояния unhealthy.
+    retries: 20
+
+# Настройки исполнителей с доступом к PostgreSQL.
+x-processing-unit: &processing-unit
+  <<: *app
+  # Переменные процесса; секреты подставляются из локального .env.
+  environment:
+    <<: *go-runtime
+    # Пароль роли приложения из .env; обязателен при запуске.
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+  # Зависимости запуска; service_healthy требует успешного healthcheck.
+  depends_on:
+    # Дождаться готовности сервиса postgres перед запуском.
+    postgres: {condition: service_healthy}
+
+# Сервисы локального стенда.
+services:
+  # Маршрутизатор публичного API без подключения к PostgreSQL.
+  router:
+    <<: *app
+    # Имя и версия образа; local-образы собираются из build.
+    image: autoscale-router:local
+    # Контекст сборки приложения; context ограничивает доступные Dockerfile исходники.
+    build: {context: ./router}
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes: ["./router/config.yaml:/etc/storage/config.yaml:ro"]
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config, /etc/storage/config.yaml]
+    # Публикация портов только на loopback хоста, в формате host:host_port:container_port.
+    ports: ["127.0.0.1:8080:8080"]
+    # Зависимости запуска; service_healthy требует успешного healthcheck.
+    depends_on:
+      # Дождаться готовности сервиса processing-unit-1 перед запуском.
+      processing-unit-1: {condition: service_healthy}
+      # Дождаться готовности сервиса processing-unit-2 перед запуском.
+      processing-unit-2: {condition: service_healthy}
+      # Дождаться готовности сервиса processing-unit-3 перед запуском.
+      processing-unit-3: {condition: service_healthy}
+  # Первый исполнитель; ID совпадает с --node и картой Router.
+  processing-unit-1:
+    <<: *processing-unit
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config, /etc/storage/config.yaml, --node, processing-unit-1]
+  # Второй исполнитель статической карты.
+  processing-unit-2:
+    <<: *processing-unit
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config, /etc/storage/config.yaml, --node, processing-unit-2]
+  # Третий исполнитель статической карты.
+  processing-unit-3:
+    <<: *processing-unit
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config, /etc/storage/config.yaml, --node, processing-unit-3]
+  # Авторитетное хранилище документов PostgreSQL.
+  postgres:
+    # Имя и версия образа; local-образы собираются из build.
+    image: postgres:17.6-bookworm
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 1
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 768m
+    # Размер /dev/shm для разделяемой памяти PostgreSQL.
+    shm_size: 128m
+    # Публикация портов только на loopback хоста, в формате host:host_port:container_port.
+    ports: ["127.0.0.1:5432:5432"]
+    # Переменные процесса; секреты подставляются из локального .env.
+    environment:
+      # Роль приложения, создаваемая entrypoint PostgreSQL на новом volume.
+      POSTGRES_USER: storage
+      # База, создаваемая entrypoint PostgreSQL на новом volume.
+      POSTGRES_DB: storage
+      # Пароль роли приложения из .env; обязателен при запуске.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      # Роль для чтения статистики, создаваемая init SQL.
+      MONITOR_USER: monitor
+      # Пароль роли мониторинга из .env.
+      MONITOR_PASSWORD: ${MONITOR_PASSWORD:?Set MONITOR_PASSWORD in .env}
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - max_connections=80
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - track_io_timing=true
+      - -c
+      - track_wal_io_timing=true
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./processing-unit/migrations:/docker-entrypoint-initdb.d:ro
+    # Проверка готовности, используемая --wait и зависимостями сервисов.
+    healthcheck:
+      # Команда проверки; CMD-SHELL раскрывает переменные окружения внутри контейнера.
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      # Период запуска healthcheck.
+      interval: 5s
+      # Максимальная длительность одной проверки.
+      timeout: 2s
+      # Число последовательных ошибок до состояния unhealthy.
+      retries: 20
+  # Публикует статистику PostgreSQL для Prometheus.
+  postgres-exporter:
+    # Имя и версия образа; local-образы собираются из build.
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 0.25
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 128m
+    # Переменные процесса; секреты подставляются из локального .env.
+    environment:
+      # Адрес базы для exporter без имени пользователя и пароля.
+      DATA_SOURCE_URI: postgres:5432/storage?sslmode=disable
+      # Роль exporter с доступом к pg_monitor.
+      DATA_SOURCE_USER: monitor
+      # Пароль exporter из .env.
+      DATA_SOURCE_PASS: ${MONITOR_PASSWORD:?Set MONITOR_PASSWORD in .env}
+      # Путь дополнительных SQL-метрик внутри контейнера exporter.
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - ./deploy/postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
+    # Зависимости запуска; service_healthy требует успешного healthcheck.
+    depends_on:
+      # Дождаться готовности сервиса postgres перед запуском.
+      postgres: {condition: service_healthy}
+  # Публикует метрики ресурсов контейнеров Linux VM.
+  cadvisor:
+    # Имя и версия образа; local-образы собираются из build.
+    image: ghcr.io/google/cadvisor:0.55.1
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 0.5
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 256m
+    # Расширенные права cAdvisor для чтения статистики контейнеров.
+    privileged: true
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--docker_only=true, --store_container_labels=true, --housekeeping_interval=5s]
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+  # Собирает и хранит временные ряды метрик.
+  prometheus:
+    # Имя и версия образа; local-образы собираются из build.
+    image: prom/prometheus:v3.5.0
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 0.5
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 512m
+    # Публикация портов только на loopback хоста, в формате host:host_port:container_port.
+    ports: ["127.0.0.1:9090:9090"]
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=24h]
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - ./deploy/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+  # Отображает provisioned дашборд локального стенда.
+  grafana:
+    # Имя и версия образа; local-образы собираются из build.
+    image: grafana/grafana:12.1.1
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 0.5
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 256m
+    # Публикация портов только на loopback хоста, в формате host:host_port:container_port.
+    ports: ["127.0.0.1:3000:3000"]
+    # Переменные процесса; секреты подставляются из локального .env.
+    environment:
+      # Разрешить просмотр локального Grafana без входа.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      # Права анонимного посетителя; Viewer разрешает только просмотр.
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Скрыть форму входа на локальном стенде.
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      # JSON домашнего дашборда внутри контейнера Grafana.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/storage.json
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+  # Отдельный генератор HTTP-нагрузки; не входит в обычный запуск.
+  load:
+    # Имя и версия образа; local-образы собираются из build.
+    image: autoscale-load:local
+    # Контекст сборки приложения; context ограничивает доступные Dockerfile исходники.
+    build: ./benchmarks/load
+    # Сервис запускается явно или при включении указанного профиля.
+    profiles: [bench]
+    # Квота CPU контейнера в долях одного ядра.
+    cpus: 2
+    # Жёсткий предел памяти контейнера; превышение может вызвать OOM.
+    mem_limit: 384m
+    # UID:GID процесса; root позволяет генератору писать в bind mount результатов.
+    user: "0:0"
+    # Переменные процесса; секреты подставляются из локального .env.
+    environment:
+      # Мягкий лимит памяти Go runtime; оставляет запас относительно mem_limit.
+      GOMEMLIMIT: 280MiB
+      # Максимум потоков, одновременно исполняющих Go-код.
+      GOMAXPROCS: "2"
+    # Аргументы процесса; дополняют или заменяют команду образа.
+    command: [--config, /etc/load/config.yaml]
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - ./benchmarks/load/config.yaml:/etc/load/config.yaml:ro
+      - ./results:/results
+    # Зависимости запуска; service_healthy требует успешного healthcheck.
+    depends_on:
+      # Дождаться готовности сервиса router перед запуском.
+      router: {condition: service_healthy}
+  # Тестовый образ processing unit с PostgreSQL-интеграцией и race detector.
+  tests:
+    # Контекст сборки приложения; context ограничивает доступные Dockerfile исходники.
+    build:
+      # Каталог исходников для сборки образа.
+      context: ./processing-unit
+      # Dockerfile тестового образа относительно контекста сборки.
+      dockerfile: Dockerfile.test
+    # Сервис запускается явно или при включении указанного профиля.
+    profiles: [test]
+    # Переменные процесса; секреты подставляются из локального .env.
+    environment:
+      # Пароль роли приложения из .env; обязателен при запуске.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+    volumes:
+      - ./processing-unit/config.yaml:/src/config.yaml:ro
+    # Зависимости запуска; service_healthy требует успешного healthcheck.
+    depends_on:
+      # Дождаться готовности сервиса postgres перед запуском.
+      postgres: {condition: service_healthy}
+
+  # Тестовый образ Router с race detector без доступа к PostgreSQL.
+  router-tests:
+    # Контекст сборки приложения; context ограничивает доступные Dockerfile исходники.
+    build:
+      # Каталог исходников для сборки образа.
+      context: ./router
+      # Dockerfile тестового образа относительно контекста сборки.
+      dockerfile: Dockerfile.test
+    # Сервис запускается явно или при включении указанного профиля.
+    profiles: [test]
+
+# Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
+volumes:
+  # Постоянные данные PostgreSQL; down без -v их сохраняет.
+  postgres-data:
+  # Постоянные временные ряды Prometheus.
+  prometheus-data:
+  # Состояние Grafana между перезапусками.
+  grafana-data:

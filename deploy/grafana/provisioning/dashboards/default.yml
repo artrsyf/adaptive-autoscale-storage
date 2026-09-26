@@ -1,0 +1,14 @@
+# Версия формата provisioning Grafana.
+apiVersion: 1
+# Источники файлов дашбордов.
+providers:
+  # Отображаемое имя в Grafana.
+  - name: Storage
+    # Тип источника: file для файлов дашборда, prometheus для метрик.
+    type: file
+    # Не удалять дашборд из Grafana при исчезновении исходного файла.
+    disableDeletion: true
+    # Параметры файлового источника.
+    options:
+      # Каталог JSON-дашбордов внутри контейнера Grafana.
+      path: /var/lib/grafana/dashboards

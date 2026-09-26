@@ -1,0 +1,52 @@
+# Жизненный цикл входящего HTTP-сервера, включая health и /metrics.
+server:
+  # Адрес прослушивания; 0.0.0.0 принимает подключения на всех интерфейсах контейнера.
+  listen_host: 0.0.0.0
+  # TCP-порт сервера; допустимы значения от 1 до 65535.
+  port: 8080
+  # Предельное время чтения HTTP-заголовков, например 2s.
+  read_header_timeout: 2s
+  # Предельное время чтения всего HTTP-запроса, включая тело.
+  read_timeout: 5s
+  # Предельное время записи HTTP-ответа; должно превышать request_timeout API.
+  write_timeout: 6s
+  # Время ожидания следующего запроса в неактивном keep-alive соединении.
+  idle_timeout: 60s
+  # Deadline одной проверки готовности: БД у исполнителя, всех нод у Router.
+  ready_timeout: 1s
+  # Время ожидания активных HTTP-запросов при завершении процесса.
+  shutdown_timeout: 10s
+# Ограничения документного HTTP API.
+api:
+  # Максимальный размер JSON-тела в байтах; превышение возвращает HTTP 413.
+  max_body_bytes: 1048576
+  # Deadline обработки команды, включая ожидание зависимостей; длительность с единицами.
+  request_timeout: 3s
+# Локальные ограничения исполнения; топология других нод здесь не хранится.
+processing:
+  # Максимум одновременно исполняемых команд на процесс; лишние сразу получают HTTP 429.
+  max_inflight: 64
+  # Допустимое число разделов (1–1024); должно совпадать с assignment.partitions Router.
+  partition_count: 128
+  # Версия назначения; Router и processing unit должны использовать одинаковое значение. Это не fencing.
+  epoch: "1"
+# Подключение и пул PostgreSQL; пароль берётся отдельно из POSTGRES_PASSWORD.
+postgres:
+  # DNS-имя или IP PostgreSQL; в Compose соответствует имени сервиса базы.
+  host: "postgres"
+  # TCP-порт сервера; допустимы значения от 1 до 65535.
+  port: 5432
+  # Имя базы PostgreSQL, созданной при инициализации стенда.
+  database: "storage"
+  # Роль PostgreSQL для запросов приложения; пароль в YAML не хранится.
+  user: "storage"
+  # Режим TLS PostgreSQL: disable, allow, prefer, require, verify-ca или verify-full.
+  sslmode: "disable"
+  # Максимум соединений PostgreSQL на один processing unit; бюджеты всех нод суммируются.
+  pool_max: 8
+  # Серверный предел времени одного SQL statement, включая ожидание блокировок; не менее 1ms.
+  statement_timeout: "2.5s"
+  # Срок простоя открытой транзакции, после которого PostgreSQL завершает сессию; не менее 1ms.
+  idle_transaction_timeout: "5s"
+  # Отдельный срок rollback при очистке транзакции, даже если контекст запроса уже отменён.
+  rollback_timeout: "1s"

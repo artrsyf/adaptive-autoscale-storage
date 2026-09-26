@@ -1,0 +1,56 @@
+# Общие настройки сбора и вычисления метрик Prometheus.
+global:
+  # Период опроса /metrics; влияет на детализацию графиков и накладные расходы.
+  scrape_interval: 5s
+  # Период вычисления recording и alerting rules, если они будут добавлены.
+  evaluation_interval: 5s
+# Источники метрик стенда.
+scrape_configs:
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: containers
+    # Цели с заранее известными адресами.
+    static_configs:
+      # Адреса HTTP endpoint метрик в формате host:port.
+      - targets: ["cadvisor:8080"]
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: postgres
+    # Цели с заранее известными адресами.
+    static_configs:
+      # Адреса HTTP endpoint метрик в формате host:port.
+      - targets: ["postgres-exporter:9187"]
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: prometheus
+    # Цели с заранее известными адресами.
+    static_configs:
+      # Адреса HTTP endpoint метрик в формате host:port.
+      - targets: ["prometheus:9090"]
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: router
+    # Цели с заранее известными адресами.
+    static_configs:
+      # Адреса HTTP endpoint метрик в формате host:port.
+      - targets: ["router:8080"]
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: processing-unit
+    # Обнаружение адресов контейнеров через DNS Compose.
+    dns_sd_configs:
+      # DNS-имена сервисов, которые нужно опрашивать.
+      - names: ["processing-unit-1", "processing-unit-2", "processing-unit-3"]
+        # Тип DNS-записи; A возвращает IPv4-адреса.
+        type: A
+        # Порт /metrics обнаруженного сервиса.
+        port: 8080
+        # Период повторного разрешения DNS-адресов.
+        refresh_interval: 5s
+  # Значение label job, используемого в запросах дашборда.
+  - job_name: load
+    # Обнаружение адресов контейнеров через DNS Compose.
+    dns_sd_configs:
+      # DNS-имена сервисов, которые нужно опрашивать.
+      - names: ["load"]
+        # Тип DNS-записи; A возвращает IPv4-адреса.
+        type: A
+        # Порт /metrics обнаруженного сервиса.
+        port: 9091
+        # Период повторного разрешения DNS-адресов.
+        refresh_interval: 5s
