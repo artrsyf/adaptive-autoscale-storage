@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" role="img" aria-label="Node load coefficient of variation">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="700" y="38" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="600">Node load coefficient of variation</text>
+<rect x="957.0" y="58" width="16" height="16" rx="2" fill="#d95f59"/>
+<text x="979.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">modulo</text>
+<rect x="1037.0" y="58" width="16" height="16" rx="2" fill="#4477aa"/>
+<text x="1059.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">consistent_hash</text>
+<rect x="1189.0" y="58" width="16" height="16" rx="2" fill="#2a9d78"/>
+<text x="1211.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">logical_partitions</text>
+<line x1="105.0" y1="625.0" x2="1365.0" y2="625.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="630.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0</text>
+<line x1="105.0" y1="519.0" x2="1365.0" y2="519.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="524.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0.0174</text>
+<line x1="105.0" y1="413.0" x2="1365.0" y2="413.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="418.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0.0348</text>
+<line x1="105.0" y1="307.0" x2="1365.0" y2="307.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="312.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0.0523</text>
+<line x1="105.0" y1="201.0" x2="1365.0" y2="201.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="206.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0.0697</text>
+<line x1="105.0" y1="95.0" x2="1365.0" y2="95.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="100.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0.0871</text>
+<text x="22" y="360.0" transform="rotate(-90 22 360.0)" text-anchor="middle" font-family="sans-serif" font-size="16">CV</text>
+<rect x="125.5" y="615.7" width="64.0" height="9.3" rx="3" fill="#d95f59"/>
+<text x="157.5" y="609.7" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.001535</text>
+<rect x="230.5" y="403.8" width="64.0" height="221.2" rx="3" fill="#4477aa"/>
+<text x="262.5" y="397.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.03636</text>
+<rect x="335.5" y="618.7" width="64.0" height="6.3" rx="3" fill="#2a9d78"/>
+<text x="367.5" y="612.7" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.001033</text>
+<rect x="440.5" y="616.9" width="64.0" height="8.1" rx="3" fill="#d95f59"/>
+<text x="472.5" y="610.9" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.00133</text>
+<rect x="545.5" y="237.4" width="64.0" height="387.6" rx="3" fill="#4477aa"/>
+<text x="577.5" y="231.4" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.06369</text>
+<rect x="650.5" y="499.8" width="64.0" height="125.2" rx="3" fill="#2a9d78"/>
+<text x="682.5" y="493.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.02057</text>
+<rect x="755.5" y="621.0" width="64.0" height="4.0" rx="3" fill="#d95f59"/>
+<text x="787.5" y="615.0" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.0006651</text>
+<rect x="860.5" y="438.7" width="64.0" height="186.3" rx="3" fill="#4477aa"/>
+<text x="892.5" y="432.7" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.03061</text>
+<rect x="965.5" y="554.9" width="64.0" height="70.1" rx="3" fill="#2a9d78"/>
+<text x="997.5" y="548.9" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.01153</text>
+<rect x="1070.5" y="603.2" width="64.0" height="21.8" rx="3" fill="#d95f59"/>
+<text x="1102.5" y="597.2" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.003577</text>
+<rect x="1175.5" y="151.8" width="64.0" height="473.2" rx="3" fill="#4477aa"/>
+<text x="1207.5" y="145.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.07777</text>
+<rect x="1280.5" y="432.3" width="64.0" height="192.7" rx="3" fill="#2a9d78"/>
+<text x="1312.5" y="426.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">0.03166</text>
+<text x="262.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→4</text>
+<text x="577.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→5</text>
+<text x="892.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→3</text>
+<text x="1207.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→10</text>
+</svg>
+
