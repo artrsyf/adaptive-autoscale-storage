@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" role="img" aria-label="Keys changing owner">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="700" y="38" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="600">Keys changing owner</text>
+<rect x="957.0" y="58" width="16" height="16" rx="2" fill="#d95f59"/>
+<text x="979.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">modulo</text>
+<rect x="1037.0" y="58" width="16" height="16" rx="2" fill="#4477aa"/>
+<text x="1059.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">consistent_hash</text>
+<rect x="1189.0" y="58" width="16" height="16" rx="2" fill="#2a9d78"/>
+<text x="1211.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">logical_partitions</text>
+<line x1="105.0" y1="625.0" x2="1365.0" y2="625.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="630.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0</text>
+<line x1="105.0" y1="519.0" x2="1365.0" y2="519.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="524.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">17.9</text>
+<line x1="105.0" y1="413.0" x2="1365.0" y2="413.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="418.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">35.8</text>
+<line x1="105.0" y1="307.0" x2="1365.0" y2="307.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="312.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">53.8</text>
+<line x1="105.0" y1="201.0" x2="1365.0" y2="201.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="206.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">71.7</text>
+<line x1="105.0" y1="95.0" x2="1365.0" y2="95.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="100.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">89.6</text>
+<text x="22" y="360.0" transform="rotate(-90 22 360.0)" text-anchor="middle" font-family="sans-serif" font-size="16">Moved keys, %</text>
+<rect x="125.5" y="181.3" width="64.0" height="443.7" rx="3" fill="#d95f59"/>
+<text x="157.5" y="175.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">74.99</text>
+<rect x="230.5" y="479.8" width="64.0" height="145.2" rx="3" fill="#4477aa"/>
+<text x="262.5" y="473.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">24.55</text>
+<rect x="335.5" y="477.3" width="64.0" height="147.7" rx="3" fill="#2a9d78"/>
+<text x="367.5" y="471.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">24.96</text>
+<rect x="440.5" y="151.8" width="64.0" height="473.2" rx="3" fill="#d95f59"/>
+<text x="472.5" y="145.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">79.99</text>
+<rect x="545.5" y="396.3" width="64.0" height="228.7" rx="3" fill="#4477aa"/>
+<text x="577.5" y="390.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">38.65</text>
+<rect x="650.5" y="394.3" width="64.0" height="230.7" rx="3" fill="#2a9d78"/>
+<text x="682.5" y="388.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">38.99</text>
+<rect x="755.5" y="151.8" width="64.0" height="473.2" rx="3" fill="#d95f59"/>
+<text x="787.5" y="145.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">79.99</text>
+<rect x="860.5" y="396.3" width="64.0" height="228.7" rx="3" fill="#4477aa"/>
+<text x="892.5" y="390.3" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">38.65</text>
+<rect x="965.5" y="393.9" width="64.0" height="231.1" rx="3" fill="#2a9d78"/>
+<text x="997.5" y="387.9" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">39.06</text>
+<rect x="1070.5" y="329.1" width="64.0" height="295.9" rx="3" fill="#d95f59"/>
+<text x="1102.5" y="323.1" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">50.02</text>
+<rect x="1175.5" y="336.7" width="64.0" height="288.3" rx="3" fill="#4477aa"/>
+<text x="1207.5" y="330.7" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">48.74</text>
+<rect x="1280.5" y="334.2" width="64.0" height="290.8" rx="3" fill="#2a9d78"/>
+<text x="1312.5" y="328.2" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">49.15</text>
+<text x="262.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→4</text>
+<text x="577.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→5</text>
+<text x="892.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→3</text>
+<text x="1207.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→10</text>
+</svg>
+

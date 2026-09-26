@@ -9,7 +9,7 @@
 ```text
 processing-unit/ # собственный Go-модуль, cmd, internal, config, migrations, Dockerfile
 router/          # собственный Go-модуль, cmd, internal, config, Dockerfile
-benchmarks/      # независимый нагрузочный клиент и сценарии
+benchmarks/      # независимые нагрузочный клиент и partitioning harness
 deploy/          # инфраструктура мониторинга
 docs/            # архитектура, roadmap, ВКР и документы эпиков
 ```
@@ -89,7 +89,7 @@ Partition = первые 8 байт SHA-256 от UTF-8 `partition_key`, unsigned
 Корневой `Makefile` объединяет команды трёх независимых модулей. Нужны GNU Make, Go и PowerShell 7 (`pwsh`) в PATH; для контейнерных команд — работающий Docker Desktop/WSL2 и настроенный `.env`. На Windows host race-тесты дополнительно требуют CGO и C-компилятор.
 
 ```powershell
-make test          # Все Go-тесты трёх модулей, без Docker
+make test          # Все Go-тесты четырёх модулей, без Docker
 make check         # Проверка форматирования, сборка, vet и все Go-тесты
 make test-all      # check + Docker race/integration tests + CRUD smoke текущих образов
 make smoke-failure # Отдельно: проверка остановки и восстановления PostgreSQL
@@ -100,6 +100,14 @@ make help          # Все команды
 
 Другие команды: `make build`, `make vet`, `make fmt`, `make test-race`, `make integration`, `make up`, `make down`, `make status`, `make logs`. Нагрузка: `make bench SCENARIO=constant DISTRIBUTION=hot RATE=50 SECONDS=60`. Отказ БД и нагрузку не запускайте одновременно.
 
+Автономное сравнение алгоритмов partitioning запускается без Docker:
+
+```powershell
+make partitioning
+```
+
+Оно сравнивает modulo, consistent hashing и фиксированные logical partitions на сценариях изменения моделируемой топологии. Статический состав runtime из трёх processing unit не меняется. Каждый запуск сохраняет конфигурацию, сырые повторения, CSV, Markdown и SVG-графики в `results/partitioning/<UTC timestamp>/`; подробная методика — в [эпике 2](docs/epics/epic-2/README.md).
+
 Эквивалентные команды без Make:
 
 ```powershell
@@ -109,6 +117,8 @@ go -C processing-unit vet ./...
 go -C router vet ./...
 go -C benchmarks/load test ./...
 go -C benchmarks/load vet ./...
+go -C benchmarks/partitioning test ./...
+go -C benchmarks/partitioning vet ./...
 docker compose --profile test run --build --rm tests
 docker compose --profile test run --build --rm router-tests
 ./benchmarks/smoke.ps1

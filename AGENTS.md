@@ -14,12 +14,13 @@ Keep domain models and concrete use-case services independent of HTTP, PostgreSQ
 
 ## Build, Test, and Development Commands
 
-Use the pinned Go toolchain and Docker Desktop with Linux containers. Root Makefile shortcuts: `make test` runs all three modules; `make check` adds formatting/build/vet; `make test-all` adds Docker race/PostgreSQL integration tests and a live CRUD smoke check. These targets require GNU Make and PowerShell 7. Docker targets leave the stack running and preserve volumes. Failure injection, benchmarks and visual checks remain separate. Direct commands:
+Use the pinned Go toolchain and Docker Desktop with Linux containers. Root Makefile shortcuts: `make test` runs all four modules; `make check` adds formatting/build/vet; `make test-all` adds Docker race/PostgreSQL integration tests and a live CRUD smoke check. These targets require GNU Make and PowerShell 7. Docker targets leave the stack running and preserve volumes. Failure injection, benchmarks and visual checks remain separate. Direct commands:
 
 - `go -C processing-unit build ./...` (also run with `-C router`): compile Go packages.
 - `go -C processing-unit test ./...` (also run with `-C router`): run Go tests.
 - `go -C processing-unit vet ./...` (also run with `-C router`): check common correctness issues.
 - `go -C benchmarks/load test ./...`: test the independent workload client.
+- `go -C benchmarks/partitioning test ./...`: test the independent partitioning research harness.
 - `docker compose up -d --build --wait --remove-orphans`: build/start the configured stack; initialize `.env` from the example once.
 - `docker compose --profile test run --build --rm tests`: run race and PostgreSQL integration tests.
 - `docker compose --profile test run --build --rm router-tests`: run Router race tests.

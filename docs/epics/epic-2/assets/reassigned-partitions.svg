@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 720" role="img" aria-label="Logical partitions changing owner">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="700" y="38" text-anchor="middle" font-family="sans-serif" font-size="24" font-weight="600">Logical partitions changing owner</text>
+<rect x="1189.0" y="58" width="16" height="16" rx="2" fill="#2a9d78"/>
+<text x="1211.0" y="71" font-family="sans-serif" font-size="13" fill="#1f2933">logical_partitions</text>
+<line x1="105.0" y1="625.0" x2="1365.0" y2="625.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="630.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">0</text>
+<line x1="105.0" y1="519.0" x2="1365.0" y2="519.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="524.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">14.1</text>
+<line x1="105.0" y1="413.0" x2="1365.0" y2="413.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="418.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">28.2</text>
+<line x1="105.0" y1="307.0" x2="1365.0" y2="307.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="312.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">42.3</text>
+<line x1="105.0" y1="201.0" x2="1365.0" y2="201.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="206.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">56.4</text>
+<line x1="105.0" y1="95.0" x2="1365.0" y2="95.0" stroke="#dce2e8" stroke-width="1"/>
+<text x="95.0" y="100.0" text-anchor="end" font-family="sans-serif" font-size="14" fill="#425466">70.6</text>
+<text x="22" y="360.0" transform="rotate(-90 22 360.0)" text-anchor="middle" font-family="sans-serif" font-size="16">Partitions</text>
+<rect x="230.5" y="384.6" width="64.0" height="240.4" rx="3" fill="#2a9d78"/>
+<text x="262.5" y="378.6" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">32</text>
+<rect x="545.5" y="249.4" width="64.0" height="375.6" rx="3" fill="#2a9d78"/>
+<text x="577.5" y="243.4" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">50</text>
+<rect x="860.5" y="249.4" width="64.0" height="375.6" rx="3" fill="#2a9d78"/>
+<text x="892.5" y="243.4" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">50</text>
+<rect x="1175.5" y="151.8" width="64.0" height="473.2" rx="3" fill="#2a9d78"/>
+<text x="1207.5" y="145.8" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#1f2933">63</text>
+<text x="262.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→4</text>
+<text x="577.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">3→5</text>
+<text x="892.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→3</text>
+<text x="1207.5" y="653.0" text-anchor="middle" font-family="sans-serif" font-size="15" font-weight="600" fill="#1f2933">5→10</text>
+</svg>
+
