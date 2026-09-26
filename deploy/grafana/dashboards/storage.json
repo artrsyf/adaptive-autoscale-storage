@@ -17,13 +17,13 @@
     "list": [
       {
         "name": "node",
-        "label": "PU",
+        "label": "Processing unit",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "query": "label_values(storage_requests_total{role=\"pu\"}, node)",
+        "query": "label_values(storage_requests_total{role=\"processing-unit\"}, node)",
         "refresh": 1,
         "multi": true,
         "includeAll": true,
@@ -71,12 +71,12 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Client → Router → PU → PostgreSQL** · Compare uniform and hot-partition runs, then database-lock pressure. **Pool wait ≠ database execution.** PostgreSQL waits/locks/I/O provide bottleneck evidence. Missing telemetry stays **No data**. Updates perform a GET before the conditional write; offered rate counts iterations, HTTP throughput counts requests."
+        "content": "**Client → Router → Processing unit → PostgreSQL** · Compare uniform and hot-partition runs, then database-lock pressure. **Pool wait ≠ database execution.** PostgreSQL waits/locks/I/O provide bottleneck evidence. Missing telemetry stays **No data**. Updates perform a GET before the conditional write; offered rate counts iterations, HTTP throughput counts requests."
       }
     },
     {
       "id": 3,
-      "title": "Configured PUs",
+      "title": "Configured processing units",
       "type": "stat",
       "description": "",
       "datasource": {
@@ -625,7 +625,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(node)(rate(storage_requests_total{role=\"pu\",node=~\"$node\"}[$window]))",
+          "expr": "sum by(node)(rate(storage_requests_total{role=\"processing-unit\",node=~\"$node\"}[$window]))",
           "legendFormat": "{{node}}"
         }
       ],
@@ -673,7 +673,7 @@
     },
     {
       "id": 13,
-      "title": "PU load share",
+      "title": "Processing unit load share",
       "type": "timeseries",
       "description": "",
       "datasource": {
@@ -689,7 +689,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(node)(rate(storage_requests_total{role=\"pu\",node=~\"$node\"}[$window])) / scalar(sum(rate(storage_requests_total{role=\"pu\"}[$window])))",
+          "expr": "sum by(node)(rate(storage_requests_total{role=\"processing-unit\",node=~\"$node\"}[$window])) / scalar(sum(rate(storage_requests_total{role=\"processing-unit\"}[$window])))",
           "legendFormat": "{{node}}"
         }
       ],
@@ -878,7 +878,7 @@
     },
     {
       "id": 17,
-      "title": "API latency p95 by PU",
+      "title": "API latency p95 by processing unit",
       "type": "timeseries",
       "description": "",
       "datasource": {
@@ -894,7 +894,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95,sum by(le,node)(rate(storage_request_duration_seconds_bucket{role=\"pu\",node=~\"$node\"}[$window])))",
+          "expr": "histogram_quantile(0.95,sum by(le,node)(rate(storage_request_duration_seconds_bucket{role=\"processing-unit\",node=~\"$node\"}[$window])))",
           "legendFormat": "{{node}}"
         }
       ],
@@ -958,12 +958,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "storage_active_requests{role=\"pu\",node=~\"$node\"}",
+          "expr": "storage_active_requests{role=\"processing-unit\",node=~\"$node\"}",
           "legendFormat": "{{node}}"
         },
         {
           "refId": "B",
-          "expr": "sum by(node)(rate(storage_requests_total{role=\"pu\",status=\"429\",node=~\"$node\"}[$window]))",
+          "expr": "sum by(node)(rate(storage_requests_total{role=\"processing-unit\",status=\"429\",node=~\"$node\"}[$window]))",
           "legendFormat": "{{node}} overload/s"
         }
       ],
@@ -1075,7 +1075,7 @@
     },
     {
       "id": 20,
-      "title": "Database operation p95 as seen by PU",
+      "title": "Database operation p95 as seen by processing unit",
       "type": "timeseries",
       "description": "Includes SQL, round trips, lock waits and commit. Not server-only latency.",
       "datasource": {
@@ -1139,7 +1139,7 @@
     },
     {
       "id": 21,
-      "title": "PU pool occupancy",
+      "title": "Processing unit pool occupancy",
       "type": "timeseries",
       "description": "",
       "datasource": {
@@ -1203,7 +1203,7 @@
     },
     {
       "id": 22,
-      "title": "PU process memory",
+      "title": "Processing unit process memory",
       "type": "timeseries",
       "description": "",
       "datasource": {
@@ -1219,7 +1219,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "process_resident_memory_bytes{job=\"pu\"}",
+          "expr": "process_resident_memory_bytes{job=\"processing-unit\"}",
           "legendFormat": "{{instance}}"
         }
       ],
@@ -1413,7 +1413,7 @@
     },
     {
       "id": 26,
-      "title": "Document SQL throughput",
+      "title": "Database SQL throughput",
       "type": "timeseries",
       "description": "",
       "datasource": {
@@ -1479,7 +1479,7 @@
       "id": 27,
       "title": "Mean server SQL execution time",
       "type": "timeseries",
-      "description": "pg_stat_statements mean; not p95 or end-to-end latency.",
+      "description": "Database-wide pg_stat_statements mean, including monitoring queries; not p95 or end-to-end latency.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -1832,7 +1832,7 @@
       "id": 33,
       "title": "Container CPU / cores",
       "type": "timeseries",
-      "description": "1.0 = one CPU core.",
+      "description": "1.0 = one CProcessing unit core.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

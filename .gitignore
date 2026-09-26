@@ -4,3 +4,8 @@ bin/
 results/
 *.exe
 coverage.out
+
+/docker-compose.override.yaml
+
+# Local research notes and dashboard screenshots.
+/research/

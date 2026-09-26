@@ -1,24 +1,35 @@
 package main
 
 import (
+	"autoscale-distr-storage-benchmarks/transport/dto"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 )
 
-// HTTP DTOs belong to the external workload client; no application imports.
-type commandDTO struct {
-	PartitionKey     string          `json:"partition_key"`
-	ID               string          `json:"id"`
-	Payload          json.RawMessage `json:"payload,omitempty"`
-	ExpectedRevision string          `json:"expected_revision,omitempty"`
-}
-type recordDTO struct {
-	Revision string `json:"revision"`
+// partition повторяет контракт хеширования Router для выбора ключей горячего раздела в нагрузке.
+func partition(key string, partitions int) int {
+	hash := sha256.Sum256([]byte(key))
+	return int(binary.BigEndian.Uint64(hash[:8]) % uint64(partitions))
 }
 
-// Mirrors the documented partition contract for targeted hot-partition workloads.
-func partition(key string) int {
-	hash := sha256.Sum256([]byte(key))
-	return int(binary.BigEndian.Uint64(hash[:8]) % 128)
+// decodeDocumentRevision читает revision из DTO ответа конкретной операции.
+func decodeDocumentRevision(decoder *json.Decoder, operation string) (string, error) {
+	switch operation {
+	case "create":
+		var response dto.DocumentCreateResponse
+		err := decoder.Decode(&response)
+		return response.Revision, err
+	case "get":
+		var response dto.DocumentGetResponse
+		err := decoder.Decode(&response)
+		return response.Revision, err
+	case "update":
+		var response dto.DocumentUpdateResponse
+		err := decoder.Decode(&response)
+		return response.Revision, err
+	default:
+		return "", fmt.Errorf("unsupported document operation %q", operation)
+	}
 }

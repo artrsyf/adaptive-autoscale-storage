@@ -2,9 +2,11 @@
 package main
 
 import (
+	"autoscale-distr-storage-benchmarks/transport/dto"
 	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"math/rand"
@@ -23,34 +25,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
-type config struct {
-	Target, Scenario, Distribution                    string
-	Rate, ReadPercent, Records, PayloadBytes, Workers int
-	Seed                                              int64
-	Duration, Warmup                                  time.Duration
-}
-
-func env(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return d
-}
-func integer(k string, d int) int {
-	v, e := strconv.Atoi(env(k, strconv.Itoa(d)))
-	if e != nil {
-		panic(k)
-	}
-	return v
-}
-func duration(k, d string) time.Duration {
-	v, e := time.ParseDuration(env(k, d))
-	if e != nil {
-		panic(k)
-	}
-	return v
-}
 
 type result struct {
 	At        time.Time `json:"at"`
@@ -74,33 +48,68 @@ type summary struct {
 	P99Seconds          float64
 }
 
+// run загружает параметры, заполняет данные, выполняет прогрев и измерение, затем сохраняет результаты нагрузки.
 func run() error {
-	c := config{env("TARGET", "http://localhost:8080"), env("SCENARIO", "constant"), env("DISTRIBUTION", "uniform"), integer("RATE", 100), integer("READ_PERCENT", 80), integer("RECORDS", 4096), integer("PAYLOAD_BYTES", 1024), integer("WORKERS", 128), int64(integer("SEED", 42)), duration("DURATION", "60s"), duration("WARMUP", "10s")}
-	if c.Rate < 1 || c.Rate > 100000 || c.ReadPercent < 0 || c.ReadPercent > 100 || c.Records < 128 || c.PayloadBytes < 16 || c.PayloadBytes > 900000 || c.Workers < 1 || c.Workers > 4096 || c.Duration <= 0 || c.Warmup < 0 {
+	path := flag.String("config", "config.yaml", "workload YAML configuration")
+	scenario := flag.String("scenario", "", "override scenario")
+	distribution := flag.String("distribution", "", "override distribution")
+	rate := flag.Int("rate", 0, "override iterations per second")
+	seconds := flag.Int("seconds", 0, "override measurement duration")
+	reads := flag.Int("read-percent", -1, "override read percentage")
+	warmup := flag.Duration("warmup", -1, "override warm-up duration")
+	records := flag.Int("records", 0, "override record count")
+	flag.Parse()
+	workloadConfig, err := loadConfig(*path)
+	if err != nil {
+		return err
+	}
+	if *scenario != "" {
+		workloadConfig.Scenario = *scenario
+	}
+	if *distribution != "" {
+		workloadConfig.Distribution = *distribution
+	}
+	if *rate != 0 {
+		workloadConfig.Rate = *rate
+	}
+	if *seconds != 0 {
+		workloadConfig.Duration = duration(time.Duration(*seconds) * time.Second)
+	}
+	if *reads != -1 {
+		workloadConfig.ReadPercent = *reads
+	}
+	if *warmup >= 0 {
+		workloadConfig.Warmup = duration(*warmup)
+	}
+	if *records != 0 {
+		workloadConfig.Records = *records
+	}
+
+	if workloadConfig.Rate < 1 || workloadConfig.Rate > 100000 || workloadConfig.ReadPercent < 0 || workloadConfig.ReadPercent > 100 || workloadConfig.Records < 128 || workloadConfig.PayloadBytes < 16 || workloadConfig.PayloadBytes > 900000 || workloadConfig.Workers < 1 || workloadConfig.Workers > 4096 || workloadConfig.Duration <= 0 || workloadConfig.Warmup < 0 {
 		return fmt.Errorf("invalid workload settings")
 	}
-	if c.Scenario != "constant" && c.Scenario != "ramp" && c.Scenario != "burst" {
+	if workloadConfig.Scenario != "constant" && workloadConfig.Scenario != "ramp" && workloadConfig.Scenario != "burst" {
 		return fmt.Errorf("unknown scenario")
 	}
-	if c.Distribution != "uniform" && c.Distribution != "hot" {
+	if workloadConfig.Distribution != "uniform" && workloadConfig.Distribution != "hot" {
 		return fmt.Errorf("unknown distribution")
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	operationContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	start := time.Now().UTC()
-	dir := filepath.Join(env("OUTPUT", "results"), start.Format("20060102T150405.000000000Z"))
-	if e := os.MkdirAll(dir, 0755); e != nil {
-		return e
+	runStartedAt := time.Now().UTC()
+	outputDirectory := filepath.Join(workloadConfig.Output, runStartedAt.Format("20060102T150405.000000000Z"))
+	if operationError := os.MkdirAll(outputDirectory, 0755); operationError != nil {
+		return operationError
 	}
-	manifest, _ := json.MarshalIndent(c, "", "  ")
-	if e := os.WriteFile(filepath.Join(dir, "config.json"), manifest, 0644); e != nil {
-		return e
+	manifest, _ := json.MarshalIndent(workloadConfig, "", "  ")
+	if operationError := os.WriteFile(filepath.Join(outputDirectory, "config.json"), manifest, 0644); operationError != nil {
+		return operationError
 	}
-	f, e := os.Create(filepath.Join(dir, "requests.jsonl"))
-	if e != nil {
-		return e
+	requestsFile, operationError := os.Create(filepath.Join(outputDirectory, "requests.jsonl"))
+	if operationError != nil {
+		return operationError
 	}
-	defer f.Close()
+	defer requestsFile.Close()
 	registry := prometheus.NewRegistry()
 	requests := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "bench_requests_total", Help: "Completed HTTP requests, including update pre-reads."}, []string{"phase", "operation", "status"})
 	latency := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: "bench_request_duration_seconds", Help: "Client HTTP duration.", Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2, 5}}, []string{"phase", "operation"})
@@ -109,133 +118,137 @@ func run() error {
 	active := prometheus.NewGauge(prometheus.GaugeOpts{Name: "bench_active_workers", Help: "Active workload iterations."})
 	phase := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "bench_phase", Help: "Current phase, one hot."}, []string{"phase"})
 	registry.MustRegister(requests, latency, offered, drops, active, phase, prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
-	for _, p := range []string{"seed", "warmup", "measure", "finished"} {
-		phase.WithLabelValues(p).Set(0)
-		drops.WithLabelValues(p)
+	for _, phaseName := range []string{"seed", "warmup", "measure", "finished"} {
+		phase.WithLabelValues(phaseName).Set(0)
+		drops.WithLabelValues(phaseName)
 	}
-	setPhase := func(p string) {
-		for _, s := range []string{"seed", "warmup", "measure", "finished"} {
-			v := 0.
-			if s == p {
-				v = 1
+	setPhase := func(phaseName string) {
+		for _, phaseLabel := range []string{"seed", "warmup", "measure", "finished"} {
+			phaseActive := 0.
+			if phaseLabel == phaseName {
+				phaseActive = 1
 			}
-			phase.WithLabelValues(s).Set(v)
+			phase.WithLabelValues(phaseLabel).Set(phaseActive)
 		}
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "benchmark metrics available") })
-	srv := &http.Server{Addr: ":9091", Handler: mux, ReadHeaderTimeout: time.Second}
+	httpMux := http.NewServeMux()
+	httpMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+	httpMux.HandleFunc("/status", func(responseWriter http.ResponseWriter, httpRequest *http.Request) {
+		fmt.Fprint(responseWriter, "benchmark metrics available")
+	})
+	httpServer := &http.Server{Addr: ":" + strconv.Itoa(workloadConfig.MetricsPort), Handler: httpMux, ReadHeaderTimeout: time.Second}
 	go func() {
-		if e := srv.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			fmt.Fprintln(os.Stderr, e)
+		if operationError := httpServer.ListenAndServe(); operationError != nil && operationError != http.ErrServerClosed {
+			fmt.Fprintln(os.Stderr, operationError)
 			stop()
 		}
 	}()
-	defer srv.Close()
-	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{MaxIdleConns: c.Workers * 2, MaxIdleConnsPerHost: c.Workers, MaxConnsPerHost: c.Workers}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	var mu sync.Mutex
-	var samples []float64
-	s := summary{Started: start}
-	buffer := bufio.NewWriterSize(f, 256*1024)
+	defer httpServer.Close()
+	httpClient := &http.Client{Timeout: time.Duration(workloadConfig.RequestTimeout), Transport: &http.Transport{MaxIdleConns: workloadConfig.Workers * 2, MaxIdleConnsPerHost: workloadConfig.Workers, MaxConnsPerHost: workloadConfig.Workers}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	var resultsMutex sync.Mutex
+	var latencySamples []float64
+	runSummary := summary{Started: runStartedAt}
+	buffer := bufio.NewWriterSize(requestsFile, 256*1024)
 	defer buffer.Flush()
 	encoder := json.NewEncoder(buffer)
 	var writeErr error
-	call := func(p, op string, command commandDTO) (recordDTO, int) {
-		var record recordDTO
+	sendDocumentCommand := func(phaseName, operation string, command any) (string, int) {
+		var documentRevision string
 		data, _ := json.Marshal(command)
-		req, _ := http.NewRequestWithContext(ctx, "POST", c.Target+"/"+op, strings.NewReader(string(data)))
-		req.Header.Set("Content-Type", "application/json")
-		t := time.Now()
-		resp, err := client.Do(req)
+		httpRequest, _ := http.NewRequestWithContext(operationContext, "POST", workloadConfig.Target+"/"+operation, strings.NewReader(string(data)))
+		httpRequest.Header.Set("Content-Type", "application/json")
+		requestStartedAt := time.Now()
+		httpResponse, err := httpClient.Do(httpRequest)
 		status := 0
 		if err == nil {
-			status = resp.StatusCode
+			status = httpResponse.StatusCode
 			if status < 300 {
-				if json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&record) != nil {
+				var decodeErr error
+				documentRevision, decodeErr = decodeDocumentRevision(json.NewDecoder(io.LimitReader(httpResponse.Body, 2<<20)), operation)
+				if decodeErr != nil {
 					status = 0
 				}
 			} else {
-				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+				_, _ = io.Copy(io.Discard, io.LimitReader(httpResponse.Body, 4096))
 			}
-			resp.Body.Close()
+			httpResponse.Body.Close()
 		}
-		seconds := time.Since(t).Seconds()
-		requests.WithLabelValues(p, op, strconv.Itoa(status)).Inc()
-		latency.WithLabelValues(p, op).Observe(seconds)
-		mu.Lock()
-		if e := encoder.Encode(result{time.Now().UTC(), p, op, status, seconds}); e != nil && writeErr == nil {
-			writeErr = e
+		seconds := time.Since(requestStartedAt).Seconds()
+		requests.WithLabelValues(phaseName, operation, strconv.Itoa(status)).Inc()
+		latency.WithLabelValues(phaseName, operation).Observe(seconds)
+		resultsMutex.Lock()
+		if operationError := encoder.Encode(result{time.Now().UTC(), phaseName, operation, status, seconds}); operationError != nil && writeErr == nil {
+			writeErr = operationError
 			stop()
 		}
-		if p == "measure" {
-			s.Completed++
+		if phaseName == "measure" {
+			runSummary.Completed++
 			if status >= 200 && status < 300 {
-				s.Success++
+				runSummary.Success++
 			} else if status == 409 {
-				s.Conflicts++
+				runSummary.Conflicts++
 			} else {
-				s.Errors++
+				runSummary.Errors++
 			}
-			samples = append(samples, seconds)
+			latencySamples = append(latencySamples, seconds)
 		}
-		mu.Unlock()
-		return record, status
+		resultsMutex.Unlock()
+		return documentRevision, status
 	}
-	keys := make([]string, c.Records)
-	var hot []int
-	for i := range keys {
-		keys[i] = fmt.Sprintf("bench-%d", i)
-		if partition(keys[i]) == 0 {
-			hot = append(hot, i)
+	keys := make([]string, workloadConfig.Records)
+	var hotRecordIndexes []int
+	for recordIndex := range keys {
+		keys[recordIndex] = fmt.Sprintf("bench-%d", recordIndex)
+		if partition(keys[recordIndex], workloadConfig.Partitions) == 0 {
+			hotRecordIndexes = append(hotRecordIndexes, recordIndex)
 		}
 	}
-	if len(hot) == 0 {
+	if len(hotRecordIndexes) == 0 {
 		return fmt.Errorf("dataset has no partition zero keys")
 	}
-	payload, _ := json.Marshal(map[string]string{"value": strings.Repeat("x", c.PayloadBytes-12)})
+	payload, _ := json.Marshal(map[string]string{"value": strings.Repeat("x", workloadConfig.PayloadBytes-12)})
 	setPhase("seed")
 	// Sequential seed is outside measured phases and fails on unexpected errors.
-	for i, key := range keys {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	for recordIndex, key := range keys {
+		if operationContext.Err() != nil {
+			return operationContext.Err()
 		}
-		command := commandDTO{PartitionKey: key, ID: "record", Payload: payload}
-		_, code := call("seed", "create", command)
+		command := dto.DocumentCreateRequest{PartitionKey: key, ID: "record", Payload: payload}
+		_, code := sendDocumentCommand("seed", "create", command)
 		if code != 201 && code != 409 {
-			return fmt.Errorf("seed %d status %d", i, code)
+			return fmt.Errorf("seed %d status %d", recordIndex, code)
 		}
 		if code == 409 {
-			record, status := call("seed", "get", commandDTO{PartitionKey: key, ID: "record"})
+			documentRevision, status := sendDocumentCommand("seed", "get", dto.DocumentGetRequest{PartitionKey: key, ID: "record"})
 			if status != 200 {
-				return fmt.Errorf("seed read %d status %d", i, status)
+				return fmt.Errorf("seed read %d status %d", recordIndex, status)
 			}
-			command.ExpectedRevision = record.Revision
-			if _, status = call("seed", "update", command); status != 200 {
-				return fmt.Errorf("seed reset %d status %d", i, status)
+			update := dto.DocumentUpdateRequest{PartitionKey: key, ID: "record", Payload: payload, ExpectedRevision: documentRevision}
+			if _, status = sendDocumentCommand("seed", "update", update); status != 200 {
+				return fmt.Errorf("seed reset %d status %d", recordIndex, status)
 			}
 		}
 	}
-	rng := rand.New(rand.NewSource(c.Seed))
-	var wg sync.WaitGroup
-	slots := make(chan struct{}, c.Workers)
+	randomGenerator := rand.New(rand.NewSource(workloadConfig.Seed))
+	var workloadWorkers sync.WaitGroup
+	workerSlots := make(chan struct{}, workloadConfig.Workers)
 	var dropped atomic.Int64
-	for _, p := range []struct {
+	for _, phase := range []struct {
 		name     string
 		duration time.Duration
-	}{{"warmup", c.Warmup}, {"measure", c.Duration}} {
-		setPhase(p.name)
-		begin := time.Now()
-		if p.name == "measure" {
-			s.MeasurementStarted = begin.UTC()
+	}{{"warmup", time.Duration(workloadConfig.Warmup)}, {"measure", time.Duration(workloadConfig.Duration)}} {
+		setPhase(phase.name)
+		phaseStartedAt := time.Now()
+		if phase.name == "measure" {
+			runSummary.MeasurementStarted = phaseStartedAt.UTC()
 		}
-		next := begin
-		end := begin.Add(p.duration)
-		for next.Before(end) && ctx.Err() == nil {
-			rate := float64(c.Rate)
-			fraction := float64(next.Sub(begin)) / float64(p.duration)
-			if p.name == "measure" {
-				switch c.Scenario {
+		nextIterationAt := phaseStartedAt
+		phaseEndsAt := phaseStartedAt.Add(phase.duration)
+		for nextIterationAt.Before(phaseEndsAt) && operationContext.Err() == nil {
+			rate := float64(workloadConfig.Rate)
+			fraction := float64(nextIterationAt.Sub(phaseStartedAt)) / float64(phase.duration)
+			if phase.name == "measure" {
+				switch workloadConfig.Scenario {
 				case "ramp":
 					rate *= .2 + .8*fraction
 				case "burst":
@@ -246,80 +259,79 @@ func run() error {
 			}
 			offered.Set(rate)
 			interval := time.Duration(float64(time.Second) / rate)
-			if delay := time.Until(next); delay > 0 {
+			if delay := time.Until(nextIterationAt); delay > 0 {
 				timer := time.NewTimer(delay)
 				select {
 				case <-timer.C:
-				case <-ctx.Done():
+				case <-operationContext.Done():
 					timer.Stop()
 				}
 			}
 			// Skip overdue slots instead of issuing a catch-up burst.
-			late := time.Since(next)
+			late := time.Since(nextIterationAt)
 			if late > interval*2 {
-				skip := int64(late / interval)
-				remaining := int64(end.Sub(next) / interval)
-				if skip > remaining {
-					skip = remaining
+				skippedIterations := int64(late / interval)
+				remainingIterations := int64(phaseEndsAt.Sub(nextIterationAt) / interval)
+				if skippedIterations > remainingIterations {
+					skippedIterations = remainingIterations
 				}
-				drops.WithLabelValues(p.name).Add(float64(skip))
-				if p.name == "measure" {
-					dropped.Add(skip)
+				drops.WithLabelValues(phase.name).Add(float64(skippedIterations))
+				if phase.name == "measure" {
+					dropped.Add(skippedIterations)
 				}
-				next = next.Add(time.Duration(skip) * interval)
-				if !next.Before(end) {
+				nextIterationAt = nextIterationAt.Add(time.Duration(skippedIterations) * interval)
+				if !nextIterationAt.Before(phaseEndsAt) {
 					break
 				}
 			}
-			i := rng.Intn(c.Records)
-			if c.Distribution == "hot" && rng.Intn(100) < 80 {
-				i = hot[rng.Intn(len(hot))]
+			recordIndex := randomGenerator.Intn(workloadConfig.Records)
+			if workloadConfig.Distribution == "hot" && randomGenerator.Intn(100) < 80 {
+				recordIndex = hotRecordIndexes[randomGenerator.Intn(len(hotRecordIndexes))]
 			}
-			read := rng.Intn(100) < c.ReadPercent
+			readOnly := randomGenerator.Intn(100) < workloadConfig.ReadPercent
 			select {
-			case slots <- struct{}{}:
-				wg.Add(1)
+			case workerSlots <- struct{}{}:
+				workloadWorkers.Add(1)
 				active.Inc()
-				go func(p string, i int, read bool) {
-					defer wg.Done()
-					defer func() { <-slots; active.Dec() }()
-					command := commandDTO{PartitionKey: keys[i], ID: "record"}
-					record, code := call(p, "get", command)
-					if !read && code == 200 {
-						command.Payload = payload
-						command.ExpectedRevision = record.Revision
-						call(p, "update", command)
+				go func(phaseName string, recordIndex int, readOnly bool) {
+					defer workloadWorkers.Done()
+					defer func() { <-workerSlots; active.Dec() }()
+					command := dto.DocumentGetRequest{PartitionKey: keys[recordIndex], ID: "record"}
+					documentRevision, code := sendDocumentCommand(phaseName, "get", command)
+					if !readOnly && code == 200 {
+						update := dto.DocumentUpdateRequest{PartitionKey: keys[recordIndex], ID: "record", Payload: payload, ExpectedRevision: documentRevision}
+						sendDocumentCommand(phaseName, "update", update)
 					}
-				}(p.name, i, read)
+				}(phase.name, recordIndex, readOnly)
 			default:
-				drops.WithLabelValues(p.name).Inc()
-				if p.name == "measure" {
+				drops.WithLabelValues(phase.name).Inc()
+				if phase.name == "measure" {
 					dropped.Add(1)
 				}
 			}
-			next = next.Add(interval)
+			nextIterationAt = nextIterationAt.Add(interval)
 		}
-		wg.Wait()
-		if p.name == "measure" {
-			s.MeasurementFinished = time.Now().UTC()
+		workloadWorkers.Wait()
+		if phase.name == "measure" {
+			runSummary.MeasurementFinished = time.Now().UTC()
 		}
 	}
 	offered.Set(0)
 	setPhase("finished")
-	s.Finished = time.Now().UTC()
-	s.Dropped = dropped.Load()
-	sort.Float64s(samples)
-	quantile := func(q float64) float64 {
-		if len(samples) == 0 {
+	runSummary.Finished = time.Now().UTC()
+	runSummary.Dropped = dropped.Load()
+	sort.Float64s(latencySamples)
+	quantile := func(quantile float64) float64 {
+		if len(latencySamples) == 0 {
 			return 0
 		}
-		return samples[int(q*float64(len(samples)-1))]
+		return latencySamples[int(quantile*float64(len(latencySamples)-1))]
 	}
-	s.P50Seconds = quantile(.5)
-	s.P95Seconds = quantile(.95)
-	s.P99Seconds = quantile(.99)
-	if ctx.Err() != nil {
-		return ctx.Err()
+	runSummary.P50Seconds = quantile(.5)
+	runSummary.P95Seconds = quantile(.95)
+	runSummary.P99Seconds = quantile(.99)
+	if operationContext.Err() != nil {
+		return operationContext.Err()
 	}
 	if writeErr != nil {
 		return writeErr
@@ -327,26 +339,28 @@ func run() error {
 	if err := buffer.Flush(); err != nil {
 		return err
 	}
-	if err := f.Close(); err != nil {
+	if err := requestsFile.Close(); err != nil {
 		return err
 	}
-	data, _ := json.MarshalIndent(s, "", "  ")
-	if e := os.WriteFile(filepath.Join(dir, "summary.json"), data, 0644); e != nil {
-		return e
+	data, _ := json.MarshalIndent(runSummary, "", "  ")
+	if operationError := os.WriteFile(filepath.Join(outputDirectory, "summary.json"), data, 0644); operationError != nil {
+		return operationError
 	}
 	metrics, err := snapshotMetrics(registry)
 	if err != nil {
 		return err
 	}
-	if e := os.WriteFile(filepath.Join(dir, "metrics.prom"), metrics, 0644); e != nil {
-		return e
+	if operationError := os.WriteFile(filepath.Join(outputDirectory, "metrics.prom"), metrics, 0644); operationError != nil {
+		return operationError
 	}
-	fmt.Printf("COMPLETE %s\n%s\n", dir, data)
-	if env("HOLD", "true") == "true" {
-		<-ctx.Done()
+	fmt.Printf("COMPLETE %s\n%s\n", outputDirectory, data)
+	if workloadConfig.Hold {
+		<-operationContext.Done()
 	}
 	return nil
 }
+
+// main разбирает аргументы запуска и завершает процесс с ненулевым кодом при ошибке приложения.
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

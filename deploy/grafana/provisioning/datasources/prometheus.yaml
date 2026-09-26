@@ -1,0 +1,20 @@
+# Версия формата provisioning Grafana.
+apiVersion: 1
+# Источники данных, создаваемые при запуске Grafana.
+datasources:
+  # Отображаемое имя в Grafana.
+  - name: Prometheus
+    # Стабильный ID datasource, на который ссылается дашборд.
+    uid: prometheus
+    # Тип источника: file для файлов дашборда, prometheus для метрик.
+    type: prometheus
+    # proxy: Grafana обращается к источнику с сервера, а не из браузера.
+    access: proxy
+    # Адрес Prometheus внутри сети Compose.
+    url: "http://prometheus:9090"
+    # Использовать этот datasource по умолчанию.
+    isDefault: true
+    # Дополнительные параметры плагина datasource.
+    jsonData:
+      # Базовый интервал данных; согласован со scrape_interval Prometheus.
+      timeInterval: 5s

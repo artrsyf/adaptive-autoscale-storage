@@ -1,9 +1,15 @@
-param([switch]$FailureChecks)
+param([switch]$FailureChecks, [string]$Api = 'http://127.0.0.1:8080')
 $ErrorActionPreference = 'Stop'
+function Invoke-StorageCompose {
+    & docker compose @args
+    if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed (exit $LASTEXITCODE)" }
+}
 Set-Location (Split-Path $PSScriptRoot -Parent)
+
+$base = $Api
 $key = @{ partition_key='smoke'; id=[Guid]::NewGuid().ToString() }
 function Command-Check($operation, $body, [int]$expected) {
-    $response = Invoke-WebRequest "http://localhost:8080/$operation" -Method Post -ContentType application/json -Body ($body | ConvertTo-Json -Depth 10) -SkipHttpErrorCheck
+    $response = Invoke-WebRequest "$base/$operation" -Method Post -ContentType application/json -Body ($body | ConvertTo-Json -Depth 10) -SkipHttpErrorCheck
     if ([int]$response.StatusCode -ne $expected) { throw "$operation expected $expected, got $($response.StatusCode): $($response.Content)" }
     return $response.Content | ConvertFrom-Json
 }
@@ -26,14 +32,14 @@ try {
     if ($recreated.revision -eq $first.revision -or $recreated.revision -eq $second.revision) { throw 'Revision reused after recreate' }
     $null = Command-Check delete $delete 409
     if ($FailureChecks) {
-        & docker compose stop postgres
+        Invoke-StorageCompose stop postgres
         if ($LASTEXITCODE -ne 0) { throw 'Cannot stop test database' }
         $dbStopped = $true
-        $response = Invoke-WebRequest 'http://localhost:8080/get' -Method Post -ContentType application/json -Body ($key | ConvertTo-Json) -SkipHttpErrorCheck
+        $response = Invoke-WebRequest "$base/get" -Method Post -ContentType application/json -Body ($key | ConvertTo-Json) -SkipHttpErrorCheck
         if ([int]$response.StatusCode -notin @(503,504)) { throw 'Database failure was not reported' }
-        $response = Invoke-WebRequest 'http://localhost:8080/readyz' -SkipHttpErrorCheck
+        $response = Invoke-WebRequest "$base/readyz" -SkipHttpErrorCheck
         if ([int]$response.StatusCode -ne 503) { throw 'Router remained ready without database' }
-        & docker compose up -d --wait postgres
+        Invoke-StorageCompose up -d --wait postgres
         if ($LASTEXITCODE -ne 0) { throw 'Cannot restart test database' }
         $dbStopped = $false
         $read = Command-Check get $key 200
@@ -43,5 +49,5 @@ try {
     $null = Command-Check delete $delete 200
     Write-Output 'PASS: Router CRUD, conflicts, delete/recreate and optional database recovery'
 } finally {
-    if ($dbStopped) { & docker compose up -d --wait postgres }
+    if ($dbStopped) { Invoke-StorageCompose up -d --wait postgres }
 }

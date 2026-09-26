@@ -7,22 +7,24 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-func TestPartitionContract(t *testing.T) {
-	if got := partition("abc"); got != 106 {
-		t.Fatalf("partition=%d, want 106", got)
+// TestPartitionContract фиксирует совместимость хеширования нагрузочного клиента с Router.
+func TestPartitionContract(test *testing.T) {
+	if actualPartition := partition("abc", 128); actualPartition != 106 {
+		test.Fatalf("partition=%d, want 106", actualPartition)
 	}
 }
 
-func TestMetricsSnapshot(t *testing.T) {
-	r := prometheus.NewRegistry()
-	c := prometheus.NewCounter(prometheus.CounterOpts{Name: "bench_snapshot_test_total", Help: "Snapshot test."})
-	r.MustRegister(c)
-	c.Add(2)
-	data, err := snapshotMetrics(r)
+// TestMetricsSnapshot проверяет, что снимок Prometheus содержит зарегистрированное значение счётчика.
+func TestMetricsSnapshot(test *testing.T) {
+	metricsRegistry := prometheus.NewRegistry()
+	counter := prometheus.NewCounter(prometheus.CounterOpts{Name: "bench_snapshot_test_total", Help: "Snapshot test."})
+	metricsRegistry.MustRegister(counter)
+	counter.Add(2)
+	data, err := snapshotMetrics(metricsRegistry)
 	if err != nil {
-		t.Fatal(err)
+		test.Fatal(err)
 	}
 	if !strings.Contains(string(data), "bench_snapshot_test_total 2") {
-		t.Fatalf("missing metric: %s", data)
+		test.Fatalf("missing metric: %s", data)
 	}
 }

@@ -7,8 +7,9 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-func snapshotMetrics(r *prometheus.Registry) ([]byte, error) {
-	families, err := r.Gather()
+// snapshotMetrics собирает зарегистрированные метрики в текстовом формате Prometheus для архива прогона.
+func snapshotMetrics(metricsRegistry *prometheus.Registry) ([]byte, error) {
+	families, err := metricsRegistry.Gather()
 	if err != nil {
 		return nil, err
 	}
