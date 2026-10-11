@@ -4,6 +4,10 @@ bin/
 results/
 *.exe
 coverage.out
+.bloop/
+.bsp/
+.metals/
+.vscode/
 
 /docker-compose.override.yaml
 

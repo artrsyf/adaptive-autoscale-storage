@@ -53,6 +53,8 @@ func writeDocumentFailure(responseWriter http.ResponseWriter, err error) {
 		writeDocumentError(responseWriter, 502, "pu_unavailable")
 	case errors.Is(err, document.ErrInvalidProcessingUnitResponse):
 		writeDocumentError(responseWriter, 502, "invalid_upstream_response")
+	case errors.Is(err, document.ErrAssignmentUnavailable):
+		writeDocumentError(responseWriter, 503, "assignment_unavailable")
 	default:
 		writeDocumentError(responseWriter, 503, "database_unavailable")
 	}

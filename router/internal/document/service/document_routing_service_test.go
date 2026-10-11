@@ -1,7 +1,6 @@
 package service
 
 import (
-	assignmentservice "autoscale-distr-storage/router/internal/assignment/service"
 	"context"
 	"errors"
 	"testing"
@@ -9,6 +8,12 @@ import (
 	"autoscale-distr-storage/router/internal/assignment/domain"
 	document "autoscale-distr-storage/router/internal/document/domain"
 )
+
+type resolverFunc func(string) (assignment.AssignmentRoute, error)
+
+func (resolve resolverFunc) Resolve(key string) (assignment.AssignmentRoute, error) {
+	return resolve(key)
+}
 
 type clientFunc func(context.Context, assignment.AssignmentRoute, document.Command) (document.Record, error)
 
@@ -19,11 +24,11 @@ func (sendCommand clientFunc) Send(operationContext context.Context, assignmentR
 
 // TestRoutingSelectsOwnerAndPropagatesError проверяет выбранный маршрут, передачу ошибки клиента и раннюю валидацию команды.
 func TestRoutingSelectsOwnerAndPropagatesError(test *testing.T) {
-	staticAssignmentService, _ := assignmentservice.NewStaticAssignmentService(assignmentservice.AssignmentConfig{Partitions: 128, Epoch: "7", Nodes: []assignment.AssignmentNode{{ID: "one", URL: "http://one:8080"}, {ID: "two", URL: "http://two:8080"}}})
 	command := document.Command{Operation: "get", Key: document.Key{PartitionKey: "abc", ID: "x"}}
-	expected := staticAssignmentService.Resolve("abc")
+	expected := assignment.AssignmentRoute{Partition: 106, Epoch: 7, Node: assignment.AssignmentNode{ID: "one", URL: "http://one:8080"}}
+	assignmentResolver := resolverFunc(func(string) (assignment.AssignmentRoute, error) { return expected, nil })
 	calls := 0
-	documentRoutingService, _ := NewDocumentRoutingService(DocumentRoutingConfig{MaxInflight: 1}, staticAssignmentService, clientFunc(func(operationContext context.Context, assignmentRoute assignment.AssignmentRoute, documentCommand document.Command) (document.Record, error) {
+	documentRoutingService, _ := NewDocumentRoutingService(DocumentRoutingConfig{MaxInflight: 1}, assignmentResolver, clientFunc(func(operationContext context.Context, assignmentRoute assignment.AssignmentRoute, documentCommand document.Command) (document.Record, error) {
 		calls++
 		if assignmentRoute != expected || documentCommand.Key != command.Key || documentCommand.Operation != "get" {
 			test.Fatal("wrong routing decision")
@@ -43,9 +48,11 @@ func TestRoutingSelectsOwnerAndPropagatesError(test *testing.T) {
 
 // TestRoutingAdmissionAndCancellation проверяет отказ при перегрузке Router и передачу отмены исходящему вызову.
 func TestRoutingAdmissionAndCancellation(test *testing.T) {
-	staticAssignmentService, _ := assignmentservice.NewStaticAssignmentService(assignmentservice.AssignmentConfig{Partitions: 128, Epoch: "1", Nodes: []assignment.AssignmentNode{{ID: "one", URL: "http://one:8080"}}})
+	assignmentResolver := resolverFunc(func(string) (assignment.AssignmentRoute, error) {
+		return assignment.AssignmentRoute{Partition: 1, Epoch: 1, Node: assignment.AssignmentNode{ID: "one", URL: "http://one:8080"}}, nil
+	})
 	entered := make(chan struct{})
-	documentRoutingService, _ := NewDocumentRoutingService(DocumentRoutingConfig{MaxInflight: 1}, staticAssignmentService, clientFunc(func(operationContext context.Context, _ assignment.AssignmentRoute, _ document.Command) (document.Record, error) {
+	documentRoutingService, _ := NewDocumentRoutingService(DocumentRoutingConfig{MaxInflight: 1}, assignmentResolver, clientFunc(func(operationContext context.Context, _ assignment.AssignmentRoute, _ document.Command) (document.Record, error) {
 		close(entered)
 		<-operationContext.Done()
 		return document.Record{}, operationContext.Err()
@@ -63,5 +70,20 @@ func TestRoutingAdmissionAndCancellation(test *testing.T) {
 	cancel()
 	if !errors.Is(<-done, context.Canceled) {
 		test.Fatal("cancellation not propagated")
+	}
+}
+
+func TestUnavailableAssignmentStopsBeforeClient(test *testing.T) {
+	calls := 0
+	assignmentResolver := resolverFunc(func(string) (assignment.AssignmentRoute, error) {
+		return assignment.AssignmentRoute{}, errors.New("no snapshot")
+	})
+	documentRoutingService, _ := NewDocumentRoutingService(DocumentRoutingConfig{MaxInflight: 1}, assignmentResolver, clientFunc(func(context.Context, assignment.AssignmentRoute, document.Command) (document.Record, error) {
+		calls++
+		return document.Record{}, nil
+	}))
+	command := document.Command{Operation: "get", Key: document.Key{PartitionKey: "a", ID: "b"}}
+	if _, _, err := documentRoutingService.Execute(context.Background(), command); !errors.Is(err, document.ErrAssignmentUnavailable) || calls != 0 {
+		test.Fatalf("err=%v calls=%d", err, calls)
 	}
 }

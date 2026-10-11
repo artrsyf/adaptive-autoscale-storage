@@ -8,7 +8,9 @@
 
 [Эпик 2](epics/epic-2/README.md) завершил A5 как автономное воспроизводимое сравнение modulo, consistent hashing и фиксированных logical partitions с управляемым assignment. По [результатам](epics/epic-2/results.md) для дальнейшего runtime выбран вариант fixed logical partitions + explicit assignment. Эпик моделирует изменения состава нод, но не меняет статический runtime стенда и не выполняет физическую миграцию данных.
 
-Следующий рабочий эпик — завершение A4 на runtime: формализация и реализация публикации assignment/epoch и fencing stale writes. Локальная проверка epoch ещё не является fencing. До этих гарантий динамическое изменение топологии и физическая миграция не начинаются. Control plane, Scala DSL и автоскейлинг не реализованы; способ развёртывания Scala DSL остаётся открытым.
+[Эпик 3](epics/epic-3/README.md) реализует A4 на runtime: Scala 3/ZIO-модуль assignment в Control Plane, атомарную публикацию snapshot, обновляемую карту Router и PostgreSQL-backed fencing. Полноценный control loop, прикладной Scala DSL и автоскейлинг не реализованы; способ развёртывания DSL остаётся открытым.
+
+Следующий рабочий инкремент — [эпик 4](epics/epic-4/README.md): наблюдающий Control Plane v1. Он использует существующую наблюдаемость B1, строит `SystemState` из Prometheus и выдаёт защищённое от неполных данных и колебаний advisory-решение `ScaleOut / ScaleIn / Maintain / InsufficientData`. Эпик закрывает B3 и подготавливает decision-ядро B5, но не изменяет replicas и assignment. Kubernetes baseline B2/B4 и actuator/reconciliation остаются следующими самостоятельными этапами.
 
 Номера исходных исследовательских эпиков не задают очередность разработки: наблюдаемость перенесена в текущий эпик, Kafka и кэши — после ранних исследований. Новые рабочие эпики получают собственные границы и критерии проверки в `docs/epics/`.
 
@@ -208,6 +210,8 @@ Metrics → State Aggregator → SystemState → Decision
 ```
 
 Теория: control plane/data plane, feedback loop, observable state, sampling interval, aggregation.
+
+Рабочая спецификация следующего инкремента: [эпик 4](epics/epic-4/README.md). Первая реализация работает в advisory-режиме, чтобы проверить сбор состояния и policy независимо от инфраструктурного actuator.
 
 ### B4. Static + CPU-based Scaling
 

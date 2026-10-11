@@ -4,5 +4,5 @@ package service
 type ProcessingUnitExecution struct {
 	Partition int
 	NodeID    string
-	Epoch     string
+	Epoch     uint64
 }

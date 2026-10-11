@@ -43,7 +43,7 @@ func TestDocumentRoutes(test *testing.T) {
 				if !hasDeadline || time.Until(deadline) > time.Second {
 					test.Fatal("shared deadline missing")
 				}
-				return document.Record{Key: documentCommand.Key, Payload: documentCommand.Payload, Revision: "v1"}, assignment.AssignmentRoute{Partition: 42, Epoch: "7", Node: assignment.AssignmentNode{ID: "node-1"}}, nil
+				return document.Record{Key: documentCommand.Key, Payload: documentCommand.Payload, Revision: "v1"}, assignment.AssignmentRoute{Partition: 42, Epoch: 7, Node: assignment.AssignmentNode{ID: "node-1"}}, nil
 			})
 			documentHttpRoutes := NewDocumentHttpRoutes(DocumentHttpConfig{MaxBodyBytes: 512, RequestTimeout: 1000000000}, port, NewDocumentHttpMetrics(registry, "test", "node-1"))
 			httpRequest := httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body))

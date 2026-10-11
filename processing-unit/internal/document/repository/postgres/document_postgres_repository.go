@@ -70,7 +70,7 @@ func (documentPostgresRepository *DocumentPostgresRepository) Close() {
 // Ready проверяет доступность БД и наличие таблицы документов.
 func (documentPostgresRepository *DocumentPostgresRepository) Ready(operationContext context.Context) error {
 	var exists bool
-	if err := documentPostgresRepository.pool.QueryRow(operationContext, `SELECT to_regclass('public.documents') IS NOT NULL`).Scan(&exists); err != nil {
+	if err := documentPostgresRepository.pool.QueryRow(operationContext, `SELECT to_regclass('public.documents') IS NOT NULL AND to_regclass('public.assignment_state') IS NOT NULL AND to_regclass('public.partition_assignments') IS NOT NULL`).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {
@@ -118,54 +118,53 @@ func (documentPostgresRepository *DocumentPostgresRepository) observe(operationC
 }
 
 // Create вставляет документ с новой revision; дубликат ключа преобразуется в ErrExists.
-func (documentPostgresRepository *DocumentPostgresRepository) Create(operationContext context.Context, key document.Key, payload document.Payload) (document.Record, error) {
+func (documentPostgresRepository *DocumentPostgresRepository) Create(operationContext context.Context, key document.Key, payload document.Payload, fence document.AssignmentFence) (document.Record, error) {
 	return documentPostgresRepository.observe(operationContext, "create", func(connection *pgxpool.Conn) (document.Record, error) {
-		return scan(connection.QueryRow(operationContext, `INSERT INTO documents(partition_key,id,payload) VALUES($1,$2,$3) RETURNING `+columns, key.PartitionKey, key.ID, []byte(payload)))
-	})
-}
-
-// Get читает документ по составному ключу; отсутствие строки возвращает ErrNotFound.
-func (documentPostgresRepository *DocumentPostgresRepository) Get(operationContext context.Context, key document.Key) (document.Record, error) {
-	return documentPostgresRepository.observe(operationContext, "get", func(connection *pgxpool.Conn) (document.Record, error) {
-		record, err := scan(connection.QueryRow(operationContext, `SELECT `+columns+` FROM documents WHERE partition_key=$1 AND id=$2`, key.PartitionKey, key.ID))
-		if errors.Is(err, pgx.ErrNoRows) {
-			err = document.ErrNotFound
-		}
-		return record, err
-	})
-}
-
-// Replace заменяет payload и revision под блокировкой строки после проверки ожидаемой версии.
-func (documentPostgresRepository *DocumentPostgresRepository) Replace(operationContext context.Context, key document.Key, payload document.Payload, expectedRevision string) (document.Record, error) {
-	return documentPostgresRepository.observe(operationContext, "update", func(connection *pgxpool.Conn) (document.Record, error) {
-		return documentPostgresRepository.lockedMutation(operationContext, connection, key, expectedRevision, func(transaction pgx.Tx, _ document.Record) (document.Record, error) {
-			return scan(transaction.QueryRow(operationContext, `UPDATE documents SET payload=$3,revision=gen_random_uuid(),updated_at=clock_timestamp() WHERE partition_key=$1 AND id=$2 RETURNING `+columns, key.PartitionKey, key.ID, []byte(payload)))
+		return documentPostgresRepository.fenced(operationContext, connection, "create", fence, func(transaction pgx.Tx) (document.Record, error) {
+			return scan(transaction.QueryRow(operationContext, `INSERT INTO documents(partition_key,id,payload) VALUES($1,$2,$3) RETURNING `+columns, key.PartitionKey, key.ID, []byte(payload)))
 		})
 	})
 }
 
-// Delete удаляет документ после проверки revision под блокировкой; возвращает метаданные без payload.
-func (documentPostgresRepository *DocumentPostgresRepository) Delete(operationContext context.Context, key document.Key, expectedRevision string) (document.Record, error) {
-	return documentPostgresRepository.observe(operationContext, "delete", func(connection *pgxpool.Conn) (document.Record, error) {
-		return documentPostgresRepository.lockedMutation(operationContext, connection, key, expectedRevision, func(transaction pgx.Tx, record document.Record) (document.Record, error) {
-			_, err := transaction.Exec(operationContext, `DELETE FROM documents WHERE partition_key=$1 AND id=$2`, key.PartitionKey, key.ID)
-			record.Payload = nil
+// Get читает документ по составному ключу; отсутствие строки возвращает ErrNotFound.
+func (documentPostgresRepository *DocumentPostgresRepository) Get(operationContext context.Context, key document.Key, fence document.AssignmentFence) (document.Record, error) {
+	return documentPostgresRepository.observe(operationContext, "get", func(connection *pgxpool.Conn) (document.Record, error) {
+		return documentPostgresRepository.fenced(operationContext, connection, "get", fence, func(transaction pgx.Tx) (document.Record, error) {
+			record, err := scan(transaction.QueryRow(operationContext, `SELECT `+columns+` FROM documents WHERE partition_key=$1 AND id=$2`, key.PartitionKey, key.ID))
+			if errors.Is(err, pgx.ErrNoRows) {
+				err = document.ErrNotFound
+			}
 			return record, err
 		})
 	})
 }
 
+// Replace заменяет payload и revision под блокировкой строки после проверки ожидаемой версии.
+func (documentPostgresRepository *DocumentPostgresRepository) Replace(operationContext context.Context, key document.Key, payload document.Payload, expectedRevision string, fence document.AssignmentFence) (document.Record, error) {
+	return documentPostgresRepository.observe(operationContext, "update", func(connection *pgxpool.Conn) (document.Record, error) {
+		return documentPostgresRepository.fenced(operationContext, connection, "update", fence, func(transaction pgx.Tx) (document.Record, error) {
+			return documentPostgresRepository.lockedMutation(operationContext, transaction, key, expectedRevision, func(transaction pgx.Tx, _ document.Record) (document.Record, error) {
+				return scan(transaction.QueryRow(operationContext, `UPDATE documents SET payload=$3,revision=gen_random_uuid(),updated_at=clock_timestamp() WHERE partition_key=$1 AND id=$2 RETURNING `+columns, key.PartitionKey, key.ID, []byte(payload)))
+			})
+		})
+	})
+}
+
+// Delete удаляет документ после проверки revision под блокировкой; возвращает метаданные без payload.
+func (documentPostgresRepository *DocumentPostgresRepository) Delete(operationContext context.Context, key document.Key, expectedRevision string, fence document.AssignmentFence) (document.Record, error) {
+	return documentPostgresRepository.observe(operationContext, "delete", func(connection *pgxpool.Conn) (document.Record, error) {
+		return documentPostgresRepository.fenced(operationContext, connection, "delete", fence, func(transaction pgx.Tx) (document.Record, error) {
+			return documentPostgresRepository.lockedMutation(operationContext, transaction, key, expectedRevision, func(transaction pgx.Tx, record document.Record) (document.Record, error) {
+				_, err := transaction.Exec(operationContext, `DELETE FROM documents WHERE partition_key=$1 AND id=$2`, key.PartitionKey, key.ID)
+				record.Payload = nil
+				return record, err
+			})
+		})
+	})
+}
+
 // lockedMutation блокирует строку, сверяет revision и выполняет изменение в одной транзакции; возвращает результат после commit.
-func (documentPostgresRepository *DocumentPostgresRepository) lockedMutation(operationContext context.Context, connection *pgxpool.Conn, key document.Key, expectedRevision string, mutate func(pgx.Tx, document.Record) (document.Record, error)) (document.Record, error) {
-	transaction, err := connection.Begin(operationContext)
-	if err != nil {
-		return document.Record{}, err
-	}
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), documentPostgresRepository.rollbackTimeout)
-		defer cancel()
-		_ = transaction.Rollback(cleanup)
-	}()
+func (documentPostgresRepository *DocumentPostgresRepository) lockedMutation(operationContext context.Context, transaction pgx.Tx, key document.Key, expectedRevision string, mutate func(pgx.Tx, document.Record) (document.Record, error)) (document.Record, error) {
 	record, err := scan(transaction.QueryRow(operationContext, `SELECT `+columns+` FROM documents WHERE partition_key=$1 AND id=$2 FOR UPDATE`, key.PartitionKey, key.ID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return document.Record{}, document.ErrNotFound
@@ -177,6 +176,41 @@ func (documentPostgresRepository *DocumentPostgresRepository) lockedMutation(ope
 		return document.Record{}, document.ErrConflict
 	}
 	record, err = mutate(transaction, record)
+	if err != nil {
+		return document.Record{}, err
+	}
+	return record, nil
+}
+
+// fenced serializes assignment publication with document execution and keeps the shared lock through commit.
+func (documentPostgresRepository *DocumentPostgresRepository) fenced(operationContext context.Context, connection *pgxpool.Conn, operation string, fence document.AssignmentFence, execute func(pgx.Tx) (document.Record, error)) (document.Record, error) {
+	transaction, err := connection.Begin(operationContext)
+	if err != nil {
+		return document.Record{}, err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), documentPostgresRepository.rollbackTimeout)
+		defer cancel()
+		_ = transaction.Rollback(cleanup)
+	}()
+	var activeEpoch uint64
+	if err = transaction.QueryRow(operationContext, `SELECT epoch FROM assignment_state WHERE singleton_id=true FOR SHARE`).Scan(&activeEpoch); err != nil {
+		return document.Record{}, err
+	}
+	var ownerNodeID string
+	assignmentError := transaction.QueryRow(operationContext, `SELECT owner_node_id FROM partition_assignments WHERE epoch=$1 AND partition_id=$2`, activeEpoch, fence.Partition).Scan(&ownerNodeID)
+	if errors.Is(assignmentError, pgx.ErrNoRows) {
+		documentPostgresRepository.metrics.Fenced.WithLabelValues(operation).Inc()
+		return document.Record{}, document.ErrWrongAssignment
+	}
+	if assignmentError != nil {
+		return document.Record{}, assignmentError
+	}
+	if activeEpoch != fence.Epoch || ownerNodeID != fence.NodeID {
+		documentPostgresRepository.metrics.Fenced.WithLabelValues(operation).Inc()
+		return document.Record{}, document.ErrWrongAssignment
+	}
+	record, err := execute(transaction)
 	if err != nil {
 		return document.Record{}, err
 	}

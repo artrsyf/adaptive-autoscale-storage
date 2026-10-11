@@ -71,12 +71,12 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Client → Router → Processing unit → PostgreSQL** · Compare uniform and hot-partition runs, then database-lock pressure. **Pool wait ≠ database execution.** PostgreSQL waits/locks/I/O provide bottleneck evidence. Missing telemetry stays **No data**. Updates perform a GET before the conditional write; offered rate counts iterations, HTTP throughput counts requests."
+        "content": "**Client → Router → Processing unit → PostgreSQL** · Control Plane publishes assignment outside the CRUD path. Compare uniform and hot-partition runs, then database-lock pressure. **Pool wait ≠ database execution.** PostgreSQL waits/locks/I/O provide bottleneck evidence. Missing telemetry stays **No data**. Updates perform a GET before the conditional write; offered rate counts iterations, HTTP throughput counts requests."
       }
     },
     {
       "id": 3,
-      "title": "Configured processing units",
+      "title": "Topology nodes / assignment epoch",
       "type": "stat",
       "description": "",
       "datasource": {
@@ -93,7 +93,12 @@
         {
           "refId": "A",
           "expr": "storage_topology_nodes{job=\"router\"}",
-          "legendFormat": "{{node}}"
+          "legendFormat": "processing units"
+        },
+        {
+          "refId": "B",
+          "expr": "storage_assignment_epoch{job=\"router\"}",
+          "legendFormat": "assignment epoch"
         }
       ],
       "fieldConfig": {
@@ -965,6 +970,11 @@
           "refId": "B",
           "expr": "sum by(node)(rate(storage_requests_total{role=\"processing-unit\",status=\"429\",node=~\"$node\"}[$window]))",
           "legendFormat": "{{node}} overload/s"
+        },
+        {
+          "refId": "C",
+          "expr": "sum by(node)(rate(storage_fenced_requests_total{role=\"processing-unit\",node=~\"$node\"}[$window]))",
+          "legendFormat": "{{node}} fenced/s"
         }
       ],
       "fieldConfig": {

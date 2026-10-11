@@ -13,4 +13,5 @@ var (
 	ErrInvalidProcessingUnitResponse = errors.New("invalid_upstream_response")
 	ErrUnavailable                   = errors.New("database_unavailable")
 	ErrCommandTooLarge               = errors.New("body_too_large")
+	ErrAssignmentUnavailable         = errors.New("assignment_unavailable")
 )

@@ -4,5 +4,5 @@ package assignment
 type AssignmentRoute struct {
 	Partition int
 	Node      AssignmentNode
-	Epoch     string
+	Epoch     uint64
 }

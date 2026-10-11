@@ -26,10 +26,6 @@ api:
 processing:
   # Максимум одновременно исполняемых команд на процесс; лишние сразу получают HTTP 429.
   max_inflight: 64
-  # Допустимое число разделов (1–1024); должно совпадать с assignment.partitions Router.
-  partition_count: 128
-  # Версия назначения; Router и processing unit должны использовать одинаковое значение. Это не fencing.
-  epoch: "1"
 # Подключение и пул PostgreSQL; пароль берётся отдельно из POSTGRES_PASSWORD.
 postgres:
   # DNS-имя или IP PostgreSQL; в Compose соответствует имени сервиса базы.

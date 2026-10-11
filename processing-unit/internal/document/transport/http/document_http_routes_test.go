@@ -40,7 +40,7 @@ func TestHTTPBoundary(test *testing.T) {
 			calls := 0
 			service := commandServiceFunc(func(operationContext context.Context, documentCommand document.Command, execution service.ProcessingUnitExecution) (document.Record, error) {
 				calls++
-				if documentCommand.Operation != "get" || documentCommand.Key.ID != "b" || execution != (service.ProcessingUnitExecution{Partition: 42, NodeID: "processing-unit-2", Epoch: "7"}) {
+				if documentCommand.Operation != "get" || documentCommand.Key.ID != "b" || execution != (service.ProcessingUnitExecution{Partition: 42, NodeID: "processing-unit-2", Epoch: 7}) {
 					test.Fatal("DTO or epoch not mapped to service arguments")
 				}
 				return document.Record{Key: documentCommand.Key}, testCase.err

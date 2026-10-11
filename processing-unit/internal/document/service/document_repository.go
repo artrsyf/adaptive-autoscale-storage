@@ -12,11 +12,11 @@ import (
 // deletion and recreation. Implementations must respect context cancellation.
 type DocumentRepository interface {
 	// Create — Создаёт запись атомарно; существующий ключ возвращает ErrExists.
-	Create(context.Context, document.Key, document.Payload) (document.Record, error)
+	Create(context.Context, document.Key, document.Payload, document.AssignmentFence) (document.Record, error)
 	// Get — Читает запись по ключу; отсутствие возвращает ErrNotFound.
-	Get(context.Context, document.Key) (document.Record, error)
+	Get(context.Context, document.Key, document.AssignmentFence) (document.Record, error)
 	// Replace — Атомарно проверяет revision и заменяет payload с новой версией.
-	Replace(context.Context, document.Key, document.Payload, string) (document.Record, error)
+	Replace(context.Context, document.Key, document.Payload, string, document.AssignmentFence) (document.Record, error)
 	// Delete — Атомарно проверяет revision и удаляет запись.
-	Delete(context.Context, document.Key, string) (document.Record, error)
+	Delete(context.Context, document.Key, string, document.AssignmentFence) (document.Record, error)
 }

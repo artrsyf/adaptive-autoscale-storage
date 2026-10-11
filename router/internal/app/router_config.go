@@ -19,7 +19,7 @@ type RouterConfig struct {
 	Routing service.DocumentRoutingConfig `yaml:"routing"`
 	// ProcessingUnitClient — Соединения и таймауты исходящего HTTP-клиента Router.
 	ProcessingUnitClient httpclient.ProcessingUnitHttpClientConfig `yaml:"processing_unit_client"`
-	// Assignment — Статическая карта маршрутизации; при изменении требуется согласованное обновление стенда.
+	// Assignment — Источник и период обновления опубликованного Control Plane snapshot.
 	Assignment assignmentservice.AssignmentConfig `yaml:"assignment"`
 }
 

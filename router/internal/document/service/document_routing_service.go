@@ -30,7 +30,10 @@ func (documentRoutingService *DocumentRoutingService) Execute(operationContext c
 	if err := documentCommand.Validate(); err != nil {
 		return document.Record{}, assignment.AssignmentRoute{}, err
 	}
-	route := documentRoutingService.assignment.Resolve(documentCommand.Key.PartitionKey)
+	route, err := documentRoutingService.assignment.Resolve(documentCommand.Key.PartitionKey)
+	if err != nil {
+		return document.Record{}, assignment.AssignmentRoute{}, document.ErrAssignmentUnavailable
+	}
 	select {
 	case documentRoutingService.slots <- struct{}{}:
 		defer func() { <-documentRoutingService.slots }()
