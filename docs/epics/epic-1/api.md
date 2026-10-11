@@ -1,6 +1,6 @@
 # Document API v1
 
-Router and processing unit are independent applications communicating over HTTP/JSON. Their Go models and adapters are private. Router remains a data-plane service; a future control plane will manage topology and assignments.
+Router and processing unit are independent applications communicating over HTTP/JSON. Their Go models and adapters are private. Router remains a data-plane service; the assignment module of Control Plane manages topology snapshots outside the CRUD request path.
 
 ## Commands
 
@@ -10,9 +10,9 @@ Create returns 201; get/update/delete return 200. Responses contain document key
 
 ## Routing
 
-Hash the UTF-8 partition key with SHA-256. Interpret the first eight bytes as an unsigned big-endian integer and take modulo partition count. With 128 partitions, `abc` maps to partition 106. Select the owner by partition modulo the number of nodes, preserving configured node order. Only Router stores node order and URLs. Processing unit stores matching partition count and epoch in its local processing configuration.
+Hash the UTF-8 partition key with SHA-256. Interpret the first eight bytes as an unsigned big-endian integer and take modulo the active snapshot partition count. With 128 partitions, `abc` maps to partition 106. Select the owner from the explicit `partition → node` assignment cached by Router.
 
-Router sends `X-Assignment-Epoch`, `X-Partition-ID` and `X-PU-ID` from the selected route, overriding any external client metadata. Processing unit checks epoch, destination identity and partition range before persistence. It trusts Router to map keys to partitions and owners; it has no topology or hash implementation. These checks are neither authentication nor ownership fencing. This internal request contract requires Router and processing unit to be deployed together after the change. Successful responses carry `X-Assignment-Epoch`, `X-Partition-ID`, and `X-PU-ID`. The abbreviated header `X-PU-ID` and error `pu_unavailable` remain v1 wire names; both refer to a processing unit. Deployment names and internal Go identifiers use the full name.
+Router sends `X-Assignment-Epoch`, `X-Partition-ID` and `X-PU-ID` from the selected route, overriding external metadata. Processing unit checks the destination and metadata shape; its PostgreSQL adapter then validates epoch and owner atomically with the document operation. It trusts Router to hash the key and does not store topology locally. Successful responses carry the same routing headers. The abbreviated header `X-PU-ID` and error `pu_unavailable` remain v1 wire names.
 
 ## Compatibility checks
 

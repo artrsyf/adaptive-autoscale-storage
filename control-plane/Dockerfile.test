@@ -1,0 +1,8 @@
+FROM sbtscala/scala-sbt:eclipse-temurin-21.0.8_9_1.12.10_2.13.18
+WORKDIR /src
+COPY project ./project
+COPY build.sbt .scalafmt.conf ./
+RUN sbt -batch update
+COPY config.yaml ./config.yaml
+COPY src ./src
+ENTRYPOINT ["sbt", "-batch", "test"]

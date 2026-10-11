@@ -4,8 +4,9 @@
 
 | Файл | Что настраивает |
 |---|---|
-| `processing-unit/config.yaml` | HTTP processing unit, admission, PostgreSQL-адаптер, локальная epoch и число разделов |
-| `router/config.yaml` | HTTP Router, admission, исходящий processing unit-клиент, assignment |
+| `processing-unit/config.yaml` | HTTP processing unit, admission и PostgreSQL-адаптер документов с fencing |
+| `router/config.yaml` | HTTP Router, admission, исходящие клиенты processing unit и Control Plane |
+| `control-plane/config.yaml` | HTTP Control Plane и PostgreSQL-репозиторий assignment |
 | `docker-compose.yaml` | Сервисы, DNS-имена, порты, образы, ресурсы, параметры сервера PostgreSQL |
 | `deploy/prometheus/prometheus.yaml` | Scrape targets и интервалы |
 | `deploy/grafana/provisioning/` | Datasource и загрузка дашборда |
@@ -33,7 +34,7 @@ docker compose --profile test run --build --rm router-tests
 ## Допустимые дубли и их цена
 
 - Имя, порт и база PostgreSQL должны совпадать в Compose, `processing-unit/config.yaml` и подключении exporter.
-- Имена/порты processing unit должны совпадать в Compose, `router.assignment.nodes` и Prometheus. Processing unit не хранит адреса соседей. `processing.epoch` и `processing.partition_count` должны совпадать с `router.assignment.epoch` и `router.assignment.partitions`. При изменении числа нод обновляются Compose, Router и Prometheus; суммарные пулы должны оставлять запас в PostgreSQL `max_connections`.
+- Имена/порты processing unit должны совпадать в Compose, активном Control Plane snapshot и Prometheus. Processing unit не хранит адреса соседей, epoch или partition count. При изменении числа нод публикуется новый полный snapshot; инфраструктурные цели и суммарные пулы должны оставаться согласованными с PostgreSQL `max_connections`.
 - Порт Router повторяется в workload-конфиге; внешний адрес smoke-check меняется через `-Api`. Адреса мониторинга в скрипте эксперимента задаются через `-Prometheus` и `-Grafana`.
 - Имя Compose-проекта используется фильтрами контейнеров в дашборде; при переименовании обновите фильтры.
 
@@ -59,4 +60,4 @@ node benchmarks/check-dashboard.cjs results/dashboard-check
 Remove-Item Env:DASHBOARD_URL
 ```
 
-Нужны Node.js, Playwright и установленный Edge; NODE_PATH может указывать на уже установленный Playwright. Проверка выполняет 41 PromQL-запрос и сохраняет снимки пяти разделов. Пустые результаты перечисляются отдельно, не заменяются нулями. Скриншоты всё равно нужно просмотреть: успешный запрос не доказывает читаемость графика.
+Нужны Node.js, Playwright и установленный Edge; NODE_PATH может указывать на уже установленный Playwright. Проверка выполняет запросы всех targets сохранённого dashboard и сохраняет снимки пяти разделов. Пустые результаты перечисляются отдельно, не заменяются нулями. Скриншоты всё равно нужно просмотреть: успешный запрос не доказывает читаемость графика.

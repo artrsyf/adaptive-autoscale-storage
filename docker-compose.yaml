@@ -49,6 +49,20 @@ x-processing-unit: &processing-unit
 
 # Сервисы локального стенда.
 services:
+  # Минимальный Control Plane публикует версионированные assignment snapshots.
+  control-plane:
+    <<: *app
+    image: autoscale-control-plane:local
+    build: {context: ./control-plane}
+    mem_limit: 384m
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      JAVA_OPTS: -XX:MaxRAMPercentage=65 -XX:ActiveProcessorCount=1
+    volumes: ["./control-plane/config.yaml:/etc/storage/config.yaml:ro"]
+    command: [--config, /etc/storage/config.yaml]
+    ports: ["127.0.0.1:8081:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
   # Маршрутизатор публичного API без подключения к PostgreSQL.
   router:
     <<: *app
@@ -64,6 +78,7 @@ services:
     ports: ["127.0.0.1:8080:8080"]
     # Зависимости запуска; service_healthy требует успешного healthcheck.
     depends_on:
+      control-plane: {condition: service_healthy}
       # Дождаться готовности сервиса processing-unit-1 перед запуском.
       processing-unit-1: {condition: service_healthy}
       # Дождаться готовности сервиса processing-unit-2 перед запуском.
@@ -283,6 +298,18 @@ services:
       dockerfile: Dockerfile.test
     # Сервис запускается явно или при включении указанного профиля.
     profiles: [test]
+
+  control-plane-tests:
+    build:
+      context: ./control-plane
+      dockerfile: Dockerfile.test
+    profiles: [test]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./control-plane/config.yaml:/src/config.yaml:ro
+    depends_on:
+      postgres: {condition: service_healthy}
 
 # Файловые mounts и постоянные volumes; суффикс ro запрещает запись из контейнера.
 volumes:

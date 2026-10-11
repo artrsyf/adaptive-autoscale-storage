@@ -32,7 +32,7 @@ func (processingUnitService *ProcessingUnitService) Execute(operationContext con
 	if err := documentCommand.Validate(); err != nil {
 		return empty, err
 	}
-	if execution.Epoch != processingUnitService.config.Epoch || execution.NodeID != processingUnitService.nodeID || execution.Partition < 0 || execution.Partition >= processingUnitService.config.PartitionCount {
+	if execution.Epoch == 0 || execution.NodeID != processingUnitService.nodeID || execution.Partition < 0 {
 		return empty, document.ErrWrongAssignment
 	}
 	processingUnitService.observer.RecordPartitionRequest(execution.Partition)
@@ -44,15 +44,16 @@ func (processingUnitService *ProcessingUnitService) Execute(operationContext con
 	}
 	var record document.Record
 	var err error
+	fence := document.AssignmentFence{Partition: execution.Partition, NodeID: execution.NodeID, Epoch: execution.Epoch}
 	switch documentCommand.Operation {
 	case "create":
-		record, err = processingUnitService.documents.Create(operationContext, documentCommand.Key, documentCommand.Payload)
+		record, err = processingUnitService.documents.Create(operationContext, documentCommand.Key, documentCommand.Payload, fence)
 	case "get":
-		record, err = processingUnitService.documents.Get(operationContext, documentCommand.Key)
+		record, err = processingUnitService.documents.Get(operationContext, documentCommand.Key, fence)
 	case "update":
-		record, err = processingUnitService.documents.Update(operationContext, documentCommand.Key, documentCommand.Payload, documentCommand.ExpectedRevision)
+		record, err = processingUnitService.documents.Update(operationContext, documentCommand.Key, documentCommand.Payload, documentCommand.ExpectedRevision, fence)
 	case "delete":
-		record, err = processingUnitService.documents.Delete(operationContext, documentCommand.Key, documentCommand.ExpectedRevision)
+		record, err = processingUnitService.documents.Delete(operationContext, documentCommand.Key, documentCommand.ExpectedRevision, fence)
 	}
 	return record, err
 }

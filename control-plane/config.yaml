@@ -1,0 +1,22 @@
+server:
+  listen_host: 0.0.0.0
+  port: 8080
+  read_header_timeout: 2s
+  read_timeout: 5s
+  write_timeout: 6s
+  idle_timeout: 60s
+  ready_timeout: 1s
+  shutdown_timeout: 10s
+api:
+  max_body_bytes: 1048576
+  request_timeout: 4s
+postgres:
+  host: postgres
+  port: 5432
+  database: storage
+  user: storage
+  sslmode: disable
+  pool_max: 4
+  statement_timeout: 2.5s
+  idle_transaction_timeout: 5s
+  rollback_timeout: 1s

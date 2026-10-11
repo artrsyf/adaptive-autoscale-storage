@@ -45,6 +45,6 @@ func executeDocumentCommand(responseWriter http.ResponseWriter, httpRequest *htt
 	}
 	responseWriter.Header().Set("X-Partition-ID", strconv.Itoa(route.Partition))
 	responseWriter.Header().Set("X-PU-ID", route.Node.ID)
-	responseWriter.Header().Set("X-Assignment-Epoch", route.Epoch)
+	responseWriter.Header().Set("X-Assignment-Epoch", strconv.FormatUint(route.Epoch, 10))
 	return record, nil
 }

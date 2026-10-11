@@ -29,7 +29,7 @@ func TestSendToSelectedDestinationWithoutRetry(test *testing.T) {
 	}))
 	defer server.Close()
 	processingUnitHttpClient := &ProcessingUnitHttpClient{Client: server.Client()}
-	_, err := processingUnitHttpClient.Send(context.Background(), assignment.AssignmentRoute{Partition: 106, Node: assignment.AssignmentNode{ID: "chosen", URL: server.URL}, Epoch: "7"}, document.Command{Operation: "update", Key: document.Key{PartitionKey: "abc", ID: "x"}})
+	_, err := processingUnitHttpClient.Send(context.Background(), assignment.AssignmentRoute{Partition: 106, Node: assignment.AssignmentNode{ID: "chosen", URL: server.URL}, Epoch: 7}, document.Command{Operation: "update", Key: document.Key{PartitionKey: "abc", ID: "x"}})
 	if !errors.Is(err, document.ErrConflict) || count != 1 {
 		test.Fatalf("calls=%d err=%v", count, err)
 	}

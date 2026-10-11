@@ -34,7 +34,7 @@ func (processingUnitHttpClient *ProcessingUnitHttpClient) Send(operationContext 
 		return empty, err
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
-	httpRequest.Header.Set("X-Assignment-Epoch", route.Epoch)
+	httpRequest.Header.Set("X-Assignment-Epoch", strconv.FormatUint(route.Epoch, 10))
 	httpRequest.Header.Set("X-Partition-ID", strconv.Itoa(route.Partition))
 	httpRequest.Header.Set("X-PU-ID", route.Node.ID)
 	httpResponse, err := processingUnitHttpClient.Client.Do(httpRequest)

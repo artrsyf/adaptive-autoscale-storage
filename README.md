@@ -1,6 +1,6 @@
 # Autoscale Distributed Storage
 
-Локальный исследовательский стенд: **HTTP Router → Go processing unit → PostgreSQL**, с документным API, статическими логическими разделами и наблюдаемостью. Архитектура и границы эпика: [docs/epics/epic-1/README.md](docs/epics/epic-1/README.md).
+Локальный исследовательский стенд: **Scala Control Plane + Go HTTP Router → Go processing unit → PostgreSQL**, с документным API, управляемым assignment, PostgreSQL-backed fencing и наблюдаемостью. Текущая архитектура: [docs/architecture.md](docs/architecture.md).
 
 Полная навигация: [документация проекта](docs/README.md).
 
@@ -9,29 +9,31 @@
 ```text
 processing-unit/ # собственный Go-модуль, cmd, internal, config, migrations, Dockerfile
 router/          # собственный Go-модуль, cmd, internal, config, Dockerfile
+control-plane/   # Scala 3/ZIO-сервис публикации assignment, sbt, Dockerfile
 benchmarks/      # независимые нагрузочный клиент и partitioning harness
 deploy/          # инфраструктура мониторинга
 docs/            # архитектура, roadmap, ВКР и документы эпиков
 ```
 
-Router выбирает исполнителя; processing unit проверяет назначение и выполняет CRUD через PostgreSQL. Каждый модуль содержит собственные модели, транспорт и `internal/utils`. Общего Go-пакета нет: совместимость задаётся [сетевым контрактом](docs/epics/epic-1/api.md). Тестовые образы находятся рядом с приложениями в `Dockerfile.test`.
+Control Plane публикует assignment, Router кэширует snapshot и выбирает исполнителя, processing unit выполняет CRUD через атомарный PostgreSQL fence. Сервисы содержат собственные модели и транспорт; общего runtime-пакета между Go и Scala нет, совместимость задаётся сетевыми контрактами.
 
 Приложение не запускает тесты или нагрузку. Направление зависимостей и пример update описаны в [архитектуре кода](docs/architecture.md).
 
 ## Запуск
 
-Нужны Docker Desktop с WSL2/Linux containers и Docker Compose. Для локальной разработки — Go 1.25.7 (toolchain указан в `go.mod` каждого приложения); Docker-сборка использует собственный Go. Подготовка конфигурации генератором не требуется. Команды выполняются из корня проекта в PowerShell 7.
+Нужны Docker Desktop с WSL2/Linux containers и Docker Compose. Для локальной разработки — Go 1.25.7, JDK 21 и sbt; Docker-сборки содержат собственные toolchain. Подготовка конфигурации генератором не требуется. Команды выполняются из корня проекта в PowerShell 7.
 
 ```powershell
 Copy-Item .env.example .env
 docker compose up -d --build --wait --remove-orphans
 ```
 
-`.env` содержит только `POSTGRES_PASSWORD` и `MONITOR_PASSWORD`. Не перезаписывайте существующий файл с паролями. Настройки приложения находятся в `router/config.yaml` и `processing-unit/config.yaml`, инфраструктуры — в Compose и `deploy/`; подробности и допустимые дубли — [конфигурация](docs/epics/epic-1/configuration.md).
+`.env` содержит только `POSTGRES_PASSWORD` и `MONITOR_PASSWORD`. Не перезаписывайте существующий файл с паролями. Настройки приложений находятся в `control-plane/config.yaml`, `router/config.yaml` и `processing-unit/config.yaml`, инфраструктуры — в Compose и `deploy/`.
 
-Compose собирает разные образы `autoscale-router:local` и `autoscale-processing-unit:local`. Router не получает пароль PostgreSQL. Подготовка конфигов не требуется. После изменения подключённых YAML-файлов используйте `docker compose up -d --build --force-recreate --wait`: Compose сам не отслеживает содержимое bind mounts.
+Compose собирает отдельные образы Control Plane, Router и processing unit. Router не получает пароль PostgreSQL. После изменения подключённых YAML-файлов используйте `docker compose up -d --build --force-recreate --wait`: Compose сам не отслеживает содержимое bind mounts.
 
 - API: http://localhost:8080
+- Assignment API: http://localhost:8081/assignments/current
 - Grafana: http://localhost:3000/d/storage-baseline
 - Prometheus: http://localhost:9090
 - Readiness: http://localhost:8080/readyz
@@ -41,13 +43,19 @@ Grafana открывается с правами просмотра; datasource 
 Внешние порты привязаны к loopback. Пароли-примеры в `.env.example` — публичные значения только для локального стенда; не используйте их вне него. cAdvisor имеет привилегии и read-only mounts для чтения ресурсов Docker VM. Метрики контейнеров относятся к Linux VM, а не ко всей Windows-машине.
 
 ```powershell
-docker compose logs --tail 100 router processing-unit-1 postgres
+docker compose logs --tail 100 control-plane router processing-unit-1 postgres
 docker compose down
 ```
 
 Остановка сохраняет данные PostgreSQL и Prometheus. `down -v` удаляет их. Изменение пароля в `.env` не меняет пароль существующей базы: init-скрипты выполняются только на новом volume. Ротация паролей существующей БД выполняется отдельно.
 
 SQL из `processing-unit/migrations/` применяется при инициализации нового PostgreSQL volume; это пока начальная схема, не универсальный migration runner.
+
+Для volume, созданного до эпика 3, примените новую идемпотентную схему assignment до перезапуска приложений:
+
+```powershell
+docker compose exec -T postgres psql -U storage -d storage -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/003_assignment.sql
+```
 
 ## API
 
@@ -78,19 +86,19 @@ Update полностью заменяет payload. Update/delete проверя
 
 ## Маршрутизация и ограничения
 
-Partition = первые 8 байт SHA-256 от UTF-8 `partition_key`, unsigned big-endian, modulo 128. Владелец = `partition % len(nodes)` в порядке `assignment.nodes`. Карта владельцев находится только в Router. Processing unit проверяет переданные Router адресат, epoch и диапазон раздела по локальным настройкам; повторно не вычисляет владельца по ключу. Это статическая конфигурация: изменение топологии требует остановки нагрузки и согласованного перезапуска компонентов. Проверка epoch не является динамическим fencing.
+Partition = первые 8 байт SHA-256 от UTF-8 `partition_key`, unsigned big-endian, modulo `partition_count` активного snapshot. Control Plane хранит явную карту `partition → processing unit`, Router периодически получает её и разрешает маршруты локально. Processing unit не вычисляет владельца по ключу: PostgreSQL атомарно сверяет переданные partition, owner и epoch с активным assignment в той же транзакции, что и CRUD.
 
-Все processing unit работают с общей таблицей PostgreSQL. SQL-планов, поиска по JSON, физического шардирования, Kafka, Redis, control plane и autoscaling в этом эпике нет.
+Все processing unit работают с общей таблицей PostgreSQL. Физического шардирования и миграции строк, Kafka, Redis и autoscaling пока нет. Текущий Control Plane содержит только модуль assignment, без control loop и scaling policy.
 
 Начальные лимиты: PostgreSQL 1 CPU / 768 MiB, processing unit 0.5 CPU / 192 MiB каждый. Пул: 8 соединений на processing unit, суммарно 24. Параметры находятся в `processing-unit/config.yaml` и `docker-compose.yaml`. Readiness проверяет доступность таблицы; перегрузка ограничивается числом активных запросов, скрытой неограниченной очереди нет.
 
 ## Проверки
 
-Корневой `Makefile` объединяет команды трёх независимых модулей. Нужны GNU Make, Go и PowerShell 7 (`pwsh`) в PATH; для контейнерных команд — работающий Docker Desktop/WSL2 и настроенный `.env`. На Windows host race-тесты дополнительно требуют CGO и C-компилятор.
+Корневой `Makefile` объединяет четыре независимых Go-модуля и Scala-модуль Control Plane. Нужны GNU Make, Go, JDK 21, sbt и PowerShell 7 (`pwsh`) в PATH; для контейнерных команд — работающий Docker Desktop/WSL2 и настроенный `.env`. На Windows host race-тесты дополнительно требуют CGO и C-компилятор.
 
 ```powershell
-make test          # Все Go-тесты четырёх модулей, без Docker
-make check         # Проверка форматирования, сборка, vet и все Go-тесты
+make test          # Go-тесты четырёх модулей и Scala-тесты Control Plane
+make check         # Форматирование, сборка, vet и тесты всех модулей
 make test-all      # check + Docker race/integration tests + CRUD smoke текущих образов
 make smoke-failure # Отдельно: проверка остановки и восстановления PostgreSQL
 make help          # Все команды
@@ -113,6 +121,7 @@ make partitioning
 ```powershell
 go -C processing-unit test ./...
 go -C router test ./...
+Push-Location control-plane; sbt -batch test; Pop-Location
 go -C processing-unit vet ./...
 go -C router vet ./...
 go -C benchmarks/load test ./...
@@ -121,10 +130,11 @@ go -C benchmarks/partitioning test ./...
 go -C benchmarks/partitioning vet ./...
 docker compose --profile test run --build --rm tests
 docker compose --profile test run --build --rm router-tests
+docker compose --profile test run --build --rm control-plane-tests
 ./benchmarks/smoke.ps1
 ```
 
-Команда Compose выполняет тесты с race detector и настоящим PostgreSQL. Без `POSTGRES_PASSWORD` локальные PostgreSQL-тесты пропускаются. `docker compose --profile test run --build --rm tests` передаёт пароль и `processing-unit/config.yaml` отдельно. Проверяются конфликтующие обновления, duplicate create, delete/recreate, отмена и таймаут под блокировкой, маршрутизация и отказ при перегрузке. `smoke.ps1` проверяет публичный API через Router. Вариант `./benchmarks/smoke.ps1 -FailureChecks` дополнительно останавливает и поднимает PostgreSQL, проверяя ошибки, readiness и сохранность записи; запускайте его отдельно от нагрузки.
+Команды Compose выполняют Go-тесты с race detector и Scala-тесты Control Plane с настоящим PostgreSQL. Без `POSTGRES_PASSWORD` локальные PostgreSQL-тесты пропускаются. Проверяются CRUD-конкуренция, fencing-lock, чтение активного assignment, CAS-конфликт, маршрутизация и admission. `smoke.ps1` проверяет публичный API через Router.
 
 ## Нагрузочные эксперименты
 
@@ -136,7 +146,7 @@ docker compose --profile test run --build --rm router-tests
 ./benchmarks/run.ps1 -Scenario ramp -Rate 500 -Seconds 90
 ./benchmarks/run.ps1 -Scenario burst -Rate 100 -Seconds 90
 ./benchmarks/run.ps1 -Scenario db-lock -Rate 100 -Seconds 60 -ReadPercent 20
-# Число processing unit меняется в Compose, assignment и Prometheus; см. docs/epics/epic-1/configuration.md.
+# Изменение состава processing unit требует нового assignment snapshot и согласованной инфраструктуры.
 ```
 
 Запускайте эксперименты последовательно. Скрипт меняет только стенд этого Compose-проекта. Для сравнения с одной processing unit вручную установите `postgres.pool_max: 24` и согласуйте Compose, Router и Prometheus; автоматически бюджет пула не пересчитывается. При таком сравнении CPU вычислительного слоя уменьшается, поэтому это сравнение числа processing unit при фиксированном бюджете БД, а не равных суммарных CPU.

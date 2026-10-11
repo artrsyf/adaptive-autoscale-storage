@@ -44,13 +44,17 @@ func executeDocumentCommand(responseWriter http.ResponseWriter, httpRequest *htt
 	if err != nil {
 		return document.Record{}, documentHttpError{400, "invalid_request"}
 	}
-	execution := service.ProcessingUnitExecution{Partition: partition, NodeID: httpRequest.Header.Get("X-PU-ID"), Epoch: httpRequest.Header.Get("X-Assignment-Epoch")}
+	epoch, err := strconv.ParseUint(httpRequest.Header.Get("X-Assignment-Epoch"), 10, 64)
+	if err != nil {
+		return document.Record{}, documentHttpError{400, "invalid_request"}
+	}
+	execution := service.ProcessingUnitExecution{Partition: partition, NodeID: httpRequest.Header.Get("X-PU-ID"), Epoch: epoch}
 	record, err := documentCommandService.Execute(httpRequest.Context(), documentCommand, execution)
 	if err != nil {
 		return document.Record{}, err
 	}
 	responseWriter.Header().Set("X-Partition-ID", strconv.Itoa(execution.Partition))
 	responseWriter.Header().Set("X-PU-ID", execution.NodeID)
-	responseWriter.Header().Set("X-Assignment-Epoch", execution.Epoch)
+	responseWriter.Header().Set("X-Assignment-Epoch", strconv.FormatUint(execution.Epoch, 10))
 	return record, nil
 }

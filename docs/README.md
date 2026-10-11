@@ -17,9 +17,12 @@
 - [Эпик 2 — исследование алгоритмов partitioning](epics/epic-2/README.md): автономный harness, сравниваемые стратегии, метрики и формат результатов.
   - [Результаты сравнения](epics/epic-2/results.md): графики, анализ и решение о дальнейшем алгоритме.
   - [Changelog и продолжение](epics/epic-2/changelog.md): состав поставки, проверки и следующий runtime-этап.
+- [Эпик 3 — управляемый assignment и fencing](epics/epic-3/README.md): Control Plane snapshot, обновление Router и PostgreSQL-backed запрет stale writes.
+- [Эпик 4 — наблюдающий Control Plane v1](epics/epic-4/README.md): следующий инкремент, который агрегирует Prometheus-метрики и выдаёт advisory scaling decisions без изменения инфраструктуры.
+  - [Планируемый change set и продолжение](epics/epic-4/changelog.md): feature-level задачи, тестовые сценарии, порядок реализации и границы следующей сессии.
 - [Каталог исследовательских эпиков](epics/planned.md): подробные задачи будущих этапов; не перечень завершённых работ.
 
-Сводка ветки и точка продолжения: [changelog эпика 1](epics/epic-1/changelog.md).
+Актуальная точка продолжения: [планируемый change set эпика 4](epics/epic-4/changelog.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
 
 ## Правила актуализации
 

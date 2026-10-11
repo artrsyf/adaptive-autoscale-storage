@@ -14,22 +14,22 @@ type repository struct {
 }
 
 // Get передаёт обращение тестовой функции хранилища.
-func (documentRepository repository) Get(operationContext context.Context, documentKey document.Key) (document.Record, error) {
+func (documentRepository repository) Get(operationContext context.Context, documentKey document.Key, _ document.AssignmentFence) (document.Record, error) {
 	return documentRepository.get(operationContext, documentKey)
 }
 
 // Create передаёт обращение тестовой функции хранилища.
-func (documentRepository repository) Create(operationContext context.Context, documentKey document.Key, _ document.Payload) (document.Record, error) {
+func (documentRepository repository) Create(operationContext context.Context, documentKey document.Key, _ document.Payload, _ document.AssignmentFence) (document.Record, error) {
 	return documentRepository.get(operationContext, documentKey)
 }
 
 // Replace передаёт обращение тестовой функции хранилища.
-func (documentRepository repository) Replace(operationContext context.Context, documentKey document.Key, _ document.Payload, _ string) (document.Record, error) {
+func (documentRepository repository) Replace(operationContext context.Context, documentKey document.Key, _ document.Payload, _ string, _ document.AssignmentFence) (document.Record, error) {
 	return documentRepository.get(operationContext, documentKey)
 }
 
 // Delete передаёт обращение тестовой функции хранилища.
-func (documentRepository repository) Delete(operationContext context.Context, documentKey document.Key, _ string) (document.Record, error) {
+func (documentRepository repository) Delete(operationContext context.Context, documentKey document.Key, _ string, _ document.AssignmentFence) (document.Record, error) {
 	return documentRepository.get(operationContext, documentKey)
 }
 
@@ -48,12 +48,12 @@ func TestExecutionValidationBeforePersistence(test *testing.T) {
 		return document.Record{Key: documentKey}, nil
 	}}
 	metrics := &observer{}
-	processingUnitService, err := NewProcessingUnitService(ProcessingUnitServiceConfig{MaxInflight: 1, PartitionCount: 128, Epoch: "7"}, "node-1", documents.NewDocumentService(documentRepository), metrics)
+	processingUnitService, err := NewProcessingUnitService(ProcessingUnitServiceConfig{MaxInflight: 1}, "node-1", documents.NewDocumentService(documentRepository), metrics)
 	if err != nil {
 		test.Fatal(err)
 	}
 	documentCommand := document.Command{Operation: "get", Key: document.Key{PartitionKey: "abc", ID: "x"}}
-	for _, execution := range []ProcessingUnitExecution{{106, "node-1", ""}, {106, "node-1", "old"}, {106, "other", "7"}, {-1, "node-1", "7"}, {128, "node-1", "7"}} {
+	for _, execution := range []ProcessingUnitExecution{{106, "node-1", 0}, {106, "other", 7}, {-1, "node-1", 7}} {
 		if _, err := processingUnitService.Execute(context.Background(), documentCommand, execution); !errors.Is(err, document.ErrWrongAssignment) {
 			test.Fatalf("execution=%v err=%v", execution, err)
 		}
@@ -61,7 +61,7 @@ func TestExecutionValidationBeforePersistence(test *testing.T) {
 	if calls != 0 || len(metrics.partitions) != 0 {
 		test.Fatal("invalid execution reached persistence or metrics")
 	}
-	record, err := processingUnitService.Execute(context.Background(), documentCommand, ProcessingUnitExecution{106, "node-1", "7"})
+	record, err := processingUnitService.Execute(context.Background(), documentCommand, ProcessingUnitExecution{106, "node-1", 7})
 	if err != nil || record.Key != documentCommand.Key || calls != 1 || len(metrics.partitions) != 1 {
 		test.Fatal("valid execution failed")
 	}
@@ -76,9 +76,9 @@ func TestAdmissionAndCancellation(test *testing.T) {
 		<-operationContext.Done()
 		return document.Record{}, operationContext.Err()
 	}}
-	processingUnitService, _ := NewProcessingUnitService(ProcessingUnitServiceConfig{MaxInflight: 1, PartitionCount: 128, Epoch: "7"}, "node-1", documents.NewDocumentService(documentRepository), metrics)
+	processingUnitService, _ := NewProcessingUnitService(ProcessingUnitServiceConfig{MaxInflight: 1}, "node-1", documents.NewDocumentService(documentRepository), metrics)
 	documentCommand := document.Command{Operation: "get", Key: document.Key{PartitionKey: "abc", ID: "x"}}
-	execution := ProcessingUnitExecution{106, "node-1", "7"}
+	execution := ProcessingUnitExecution{106, "node-1", 7}
 	operationContext, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)

@@ -44,7 +44,7 @@ func TestHTTPBoundary(test *testing.T) {
 				if documentCommand.Operation != "get" || documentCommand.Key.ID != "b" {
 					test.Fatal("DTO not mapped to service arguments")
 				}
-				return document.Record{Key: documentCommand.Key}, assignment.AssignmentRoute{Partition: 42, Epoch: "9", Node: assignment.AssignmentNode{ID: "processing-unit-2"}}, testCase.err
+				return document.Record{Key: documentCommand.Key}, assignment.AssignmentRoute{Partition: 42, Epoch: 9, Node: assignment.AssignmentNode{ID: "processing-unit-2"}}, testCase.err
 			})
 			documentHttpRoutes := NewDocumentHttpRoutes(DocumentHttpConfig{MaxBodyBytes: 1024, RequestTimeout: 1000000000}, service, NewDocumentHttpMetrics(prometheus.NewRegistry(), "router", "router"))
 			httpRequest := httptest.NewRequest("POST", "/get", strings.NewReader(testCase.body))
