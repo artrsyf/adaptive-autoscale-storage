@@ -8,7 +8,7 @@ import storage.controlplane.assignment.domain.AssignmentError
 import storage.controlplane.assignment.service.AssignmentService
 import storage.controlplane.assignment.transport.dto.{AssignmentPublishRequest, AssignmentSnapshotDto, ErrorResponse}
 import storage.controlplane.config.ApiConfig
-import zio.{Duration, IO}
+import zio.{Duration, IO, TaskLayer, URLayer, ZLayer}
 
 final class AssignmentHttpHandler(service: AssignmentService, config: ApiConfig) {
   type ApiFailure = (StatusCode, ErrorResponse)
@@ -31,4 +31,10 @@ final class AssignmentHttpHandler(service: AssignmentService, config: ApiConfig)
     case EpochConflict        => StatusCode.Conflict -> ErrorResponse("epoch_conflict")
     case _: Unavailable       => StatusCode.ServiceUnavailable -> ErrorResponse("assignment_unavailable")
   }
+}
+
+object AssignmentHttpHandler {
+  val layer: URLayer[AssignmentService & ApiConfig, AssignmentHttpHandler] = ZLayer.derive[AssignmentHttpHandler]
+  val module: TaskLayer[AssignmentHttpHandler] =
+    ZLayer.make[AssignmentHttpHandler](AssignmentService.module, ApiConfig.module, layer)
 }

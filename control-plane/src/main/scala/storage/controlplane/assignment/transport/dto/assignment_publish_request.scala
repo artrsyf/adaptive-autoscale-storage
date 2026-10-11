@@ -1,13 +1,16 @@
 package storage.controlplane.assignment.transport.dto
 
-import zio.json.{jsonField, jsonNoExtraFields, DeriveJsonCodec, JsonCodec}
+import sttp.tapir.Schema
+import tofu.logging.Loggable
+import tofu.logging.derivation.derived
+import zio.json.{jsonMemberNames, jsonNoExtraFields, JsonCodec, SnakeCase}
 
 @jsonNoExtraFields
+@jsonMemberNames(SnakeCase)
 final case class AssignmentPublishRequest(
-    @jsonField("expected_epoch") expectedEpoch: Long,
+    expectedEpoch: Long,
     assignment: AssignmentSnapshotDto
-)
-
-object AssignmentPublishRequest {
-  implicit val codec: JsonCodec[AssignmentPublishRequest] = DeriveJsonCodec.gen[AssignmentPublishRequest]
-}
+) derives JsonCodec,
+      Loggable,
+      CanEqual,
+      Schema

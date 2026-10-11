@@ -12,7 +12,7 @@
 
 Каждый образ содержит собственное приложение. Переключателя `--role` нет. Router не импортирует PostgreSQL-репозитории; processing unit не импортирует Router или Control Plane. Go-приложения, Scala Control Plane и benchmark-модули имеют независимые сборки и Docker build contexts без общего runtime-пакета. Небольшие модели, DTO и утилиты локальны каждому приложению. Совместимость определяют HTTP-контракты, а не общий исходный код.
 
-Router выполняет data-plane маршрутизацию по локальному неизменяемому snapshot. Control Plane владеет публикацией assignment, но не находится в пути CRUD-запроса. Его текущий модуль `assignment` является началом будущего control plane; агрегация метрик, решения о масштабировании и reconciliation пока не реализованы.
+Router выполняет data-plane маршрутизацию по локальному неизменяемому snapshot. Control Plane владеет публикацией assignment, но не находится в пути CRUD-запроса. Кроме независимого модуля `assignment`, Scala-приложение содержит `systemstate` с Prometheus adapter и последовательной агрегацией, а также `scaling` с чистой advisory policy. Рекомендация наблюдаема, но не изменяет replicas и assignment; actuator и reconciliation не реализованы.
 
 ## Ответственность слоёв
 
@@ -33,7 +33,9 @@ processing unit HTTP → DTO → document.Command + Execution → processing-uni
   → validate destination/metadata → admission → document/service.DocumentService
   → Repository → PostgreSQL transaction: assignment fence → document mutation → commit
 
-Control Plane HTTP → assignment DTO → AssignmentService
+Control Plane assignment HTTP → assignment DTO → AssignmentService
+Control Plane polling fiber → MetricsSource → StateAggregator → SystemState → ScalingPolicy
+Control Plane read-only HTTP → SystemState/ScalingDecision DTO
   → PostgreSQL: CAS current epoch → store complete snapshot → atomically activate epoch
 ```
 
@@ -51,7 +53,7 @@ Control Plane HTTP → assignment DTO → AssignmentService
 
 `benchmarks/partitioning` — ещё один независимый Go-модуль, но не сетевой клиент и не часть runtime. Он строит неизменяемые снимки размещения через общий интерфейс алгоритмов, моделирует переходы между составами нод и сохраняет JSON/CSV/Markdown/SVG в игнорируемом `results/partitioning/`. Моделируемые ноды не запускаются, а потенциальный объём миграции не является измеренным сетевым переносом.
 
-Router публикует `storage_topology_nodes`, `storage_assignment_epoch` и результаты refresh. Control Plane публикует активный epoch; processing unit — число fenced-запросов и фактически полученные разделы.
+Router публикует `storage_topology_nodes`, `storage_assignment_epoch` и результаты refresh. Control Plane публикует активный epoch, состояние controller loop, качество данных, вычисленные сигналы, thresholds и advisory decision; processing unit — число fenced-запросов и фактически полученные разделы.
 
 ## Единая структура и имена
 
@@ -123,7 +125,7 @@ HTTP-маршруты регистрируются явно в `document/transpo
 
 Эта структура применяется ко всем сущностям и приложениям, включая будущие сервисы. На сущность создаётся один `<Entity>HttpHandler` в `<entity>_http_handler.go`, а операции реализуются его методами. Отдельный `<entity>_http_routes.go` связывает HTTP-метод и путь с конкретным методом обработчика. Общие настройки и middleware не дублируются по операциям. DTO остаются отдельными для каждой операции в `transport/dto`.
 
-Сейчас предметные входные обработчики есть во всех трёх приложениях. Router и processing unit регистрируют Go `net/http` routes. Scala Control Plane сохраняет ту же границу: `AssignmentHttpHandler` выполняет операции, `AssignmentHttpRoutes` декларативно связывает GET/PUT через Tapir, а wire DTO находятся отдельно от domain. Нагрузочный клиент имеет собственные исходящие DTO. Служебные `/livez`, `/readyz`, `/metrics` и `/status` остаются инфраструктурными endpoint и не требуют искусственного доменного слоя.
+Сейчас предметные входные обработчики есть во всех трёх приложениях. Router и processing unit регистрируют Go `net/http` routes. Scala Control Plane сохраняет ту же границу: `AssignmentHttpHandler` выполняет операции, `AssignmentHttpRoutes` декларативно связывает GET/PUT через Tapir, а wire DTO находятся отдельно от domain. `SystemStateHttpHandler` и `ScalingDecisionHttpHandler` отдают read-only `/control/state` и `/control/decision`; они читают атомарный controller snapshot и не запускают агрегацию по HTTP-запросу. Нагрузочный клиент имеет собственные исходящие DTO. Служебные `/livez`, `/readyz` и `/metrics` остаются инфраструктурными endpoint и не требуют искусственного доменного слоя.
 
 ## Путь пользовательского запроса
 
@@ -336,6 +338,6 @@ flowchart LR
     G[Grafana] -->|"PromQL"| PR
 ```
 
-Prometheus, Grafana, exporter и cAdvisor работают отдельно от синхронного пути CRUD, но потребляют ресурсы стенда. `/readyz` Router вызывает `ProcessingUnitHttpClient.Ready` для всех нод активного snapshot; `/readyz` unit проверяет таблицы документов и assignment; `/readyz` Control Plane проверяет metadata schema. Эти проверки не выполняются перед каждым CRUD-запросом.
+Prometheus, Grafana, exporter и cAdvisor работают отдельно от синхронного пути CRUD, но потребляют ресурсы стенда. Control Plane опрашивает Prometheus одним непересекающимся циклом, фиксирует timestamp и active assignment, а перед публикацией повторно проверяет epoch. Missing, stale, duplicate и unknown-node series переводят состояние в incomplete. Недоступность Prometheus даёт degraded/`InsufficientData`, но не участвует в `/readyz`. `/readyz` Router вызывает `ProcessingUnitHttpClient.Ready` для всех нод active snapshot; `/readyz` unit проверяет таблицы документов и assignment; `/readyz` Control Plane проверяет metadata schema. Эти проверки не выполняются перед каждым CRUD-запросом.
 
-Scala Control Plane отсутствует в hot path CRUD: он публикует assignment отдельно. Запланированный прикладной Scala DSL, autoscaling, Kafka и Redis не реализованы. Processing unit не вычисляет владельца по ключу, но PostgreSQL проверяет переданные partition, owner и epoch как атомарный fence. Потеря ответа после commit оставляет результат записи неопределённым для клиента; автоматического retry нет.
+Scala Control Plane отсутствует в hot path CRUD: он публикует assignment отдельно и вычисляет только advisory scaling decision. Автоматическое масштабирование, прикладной Scala DSL, Kafka и Redis не реализованы. Processing unit не вычисляет владельца по ключу, но PostgreSQL проверяет переданные partition, owner и epoch как атомарный fence. Потеря ответа после commit оставляет результат записи неопределённым для клиента; автоматического retry нет.

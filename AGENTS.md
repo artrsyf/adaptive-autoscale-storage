@@ -33,6 +33,10 @@ Use `gofmt` for Go formatting, idiomatic package names, and descriptive exported
 
 Keep component Config types and metrics with their consuming adapters. Use descriptive names such as `DocumentPostgresConfig` and `DocumentPostgresRepository`. Technical helpers belong in each application’s `internal/utils`. Keep applications as independent Go modules without cross-application imports or local replacements. Prefer native YAML configuration and small explicit duplication over generators or infrastructure schemas in Go. Keep duplicated addresses consistent manually.
 
+In Scala 3, use Scala 3 syntax and derivation throughout; do not declare Scala 2-style `implicit` values. Derive every type class supported by a data type directly (for example, `derives JsonCodec, Loggable, CanEqual, Schema`) and keep only behavior or mappings in companion objects. Apply `@jsonMemberNames(SnakeCase)` to DTOs whose complete wire contract uses snake_case; reserve field-level overrides for exceptional external contracts. Tapir endpoints must use concrete typed `jsonBody[Dto]` inputs and outputs; do not expose application JSON contracts as `stringJsonBody` or serialize them manually in handlers.
+
+Model dependencies through ZIO environment layers. Every service or adapter class with constructor dependencies has a companion `val layer` that lists only those dependencies and uses `ZLayer.derive[...]` whenever derivation can construct it. Also expose a `val module` that composes the service with its concrete dependency modules into a self-contained layer. Build a closed module with `ZLayer.make[...]`; use `ZLayer.makeSome[...]` only when the result intentionally retains external environment requirements, and do not assemble modules with manual `>>>` chains. Keep ordinary service constructors public unless construction itself enforces a real invariant; do not add a public effectful `make` solely to compensate for a private constructor. Keep implementation selection and the final layer graph in the outer application entrypoint; application code must not instantiate dependency-bearing services with `new` or manually pass implementations through a constructor chain.
+
 ## Testing Guidelines
 
 Use Go's standard testing package; no coverage threshold is established. PostgreSQL tests use the application YAML and `POSTGRES_PASSWORD`; use `docker compose --profile test run --build --rm tests`. Test routing, concurrent writes, cancellation, and database failures. Record benchmark settings, limits, warm-up, throughput, errors, and latency. Measure pool acquisition separately from database execution. Never report unexecuted benchmarks as results.
@@ -44,6 +48,14 @@ Use `epic/<number>-<short-name>` branches. Commit messages include feature numbe
 ## Local Execution & Design Decisions
 
 Before starting the stack, ask the user to enable WSL2. Calibrate explicit resource limits experimentally; smaller limits alone do not ensure representative results. Verify generator and monitoring headroom. Scala DSL deployment remains an open decision.
+
+## Control Plane Observability
+
+The Scala Control Plane owns assignment administration and the advisory controller. Keep `assignment`, `systemstate`, and `scaling` as separate feature slices. Prometheus JSON and PromQL belong only to the `systemstate` Prometheus client; HTTP DTOs remain under each feature's `transport/dto`. The active assignment is the authoritative node set for every observation. Recheck its epoch before publishing a collected state so a topology change cannot produce a recommendation for a mixed snapshot.
+
+Scaling policy is a pure transition over `SystemState`, explicit `PolicyState`, configuration, and evaluation time. Missing or stale required metrics produce `InsufficientData`. Advisory decisions never publish assignment or change replicas. `storage_active_requests` is in-flight application work, not queue size or exact admission occupancy. Keep `429` overload separate from `5xx` server errors, and do not turn client `4xx` responses into a scaling signal.
+
+The Control Plane overview dashboard visualizes controller-published aggregates and thresholds, not an independent approximation of policy in Grafana. Missing data must not render as zero. Keep controller metric labels bounded to fixed signal, status, direction, and decision vocabularies. Generated run artifacts belong under ignored `results/`; only selected validation screenshots referenced by epic documentation belong under `docs/epics/epic-4/` after acceptance.
 
 ## Naming & Slice Layout
 

@@ -26,6 +26,7 @@ help:
 	@echo "make status/logs   - Inspect Compose services"
 	@echo "make fmt           - Format Go and Scala code"
 	@echo "make bench SCENARIO=constant DISTRIBUTION=hot RATE=50 SECONDS=60"
+	@echo "make bench SCENARIO=controller RATE=150 SECONDS=180 - advisory controller validation"
 	@echo "make partitioning  - Compare partition placement algorithms and write a local report"
 
 build:

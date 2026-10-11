@@ -12,7 +12,8 @@ object AssignmentPublishRequestSpec extends ZIOSpecDefault {
       val decoded = validJson.fromJson[AssignmentPublishRequest]
       assertTrue(
         decoded.exists(_.expectedEpoch == 1),
-        decoded.exists(_.assignment.partitionCount == 1)
+        decoded.exists(_.assignment.partitionCount == 1),
+        decoded.map(_.toJson).contains(validJson)
       )
     },
     test("rejects unknown JSON fields") {

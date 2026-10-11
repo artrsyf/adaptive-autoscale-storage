@@ -2,6 +2,7 @@ ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / scalaVersion := "3.3.7"
 
 val tapirVersion = "1.13.15"
+val tofuVersion = "0.14.3"
 
 lazy val root = (project in file("."))
   .enablePlugins(JavaAppPackaging)
@@ -12,6 +13,7 @@ lazy val root = (project in file("."))
       "dev.zio" %% "zio" % "2.1.25",
       "dev.zio" %% "zio-http" % "3.10.1",
       "dev.zio" %% "zio-json" % "0.7.44",
+      "tf.tofu" %% "tofu-logging-derivation" % tofuVersion,
       "com.softwaremill.sttp.tapir" %% "tapir-core" % tapirVersion,
       "com.softwaremill.sttp.tapir" %% "tapir-zio-http-server" % tapirVersion,
       "com.softwaremill.sttp.tapir" %% "tapir-json-zio" % tapirVersion,

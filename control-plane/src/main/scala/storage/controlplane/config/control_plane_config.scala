@@ -5,10 +5,12 @@ import java.nio.file.{Files, Path}
 import org.yaml.snakeyaml.LoaderOptions
 import org.yaml.snakeyaml.Yaml
 import org.yaml.snakeyaml.constructor.SafeConstructor
-import zio.{Task, ZIO}
+import zio.{Task, TaskLayer, URLayer, ZIO, ZLayer}
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.jdk.CollectionConverters._
+import storage.controlplane.scaling.domain.{ScalingConfig, ThresholdBand}
+import storage.controlplane.systemstate.domain.SignalName
 
 final case class ServerConfig(
     listenHost: String,
@@ -20,8 +22,17 @@ final case class ServerConfig(
     readyTimeout: FiniteDuration,
     shutdownTimeout: FiniteDuration
 )
+object ServerConfig {
+  val layer: URLayer[ControlPlaneConfig, ServerConfig] =
+    ZLayer.fromFunction((config: ControlPlaneConfig) => config.server)
+  val module: TaskLayer[ServerConfig] = ZLayer.make[ServerConfig](ControlPlaneConfig.module, layer)
+}
 
 final case class ApiConfig(maxBodyBytes: Long, requestTimeout: FiniteDuration)
+object ApiConfig {
+  val layer: URLayer[ControlPlaneConfig, ApiConfig] = ZLayer.fromFunction((config: ControlPlaneConfig) => config.api)
+  val module: TaskLayer[ApiConfig] = ZLayer.make[ApiConfig](ControlPlaneConfig.module, layer)
+}
 
 final case class PostgresConfig(
     host: String,
@@ -37,8 +48,35 @@ final case class PostgresConfig(
   def jdbcUrl: String =
     s"jdbc:postgresql://$host:$port/$database?sslmode=$sslMode&ApplicationName=control-plane"
 }
+object PostgresConfig {
+  val layer: URLayer[ControlPlaneConfig, PostgresConfig] =
+    ZLayer.fromFunction((config: ControlPlaneConfig) => config.postgres)
+  val module: TaskLayer[PostgresConfig] = ZLayer.make[PostgresConfig](ControlPlaneConfig.module, layer)
+}
 
-final case class ControlPlaneConfig(server: ServerConfig, api: ApiConfig, postgres: PostgresConfig) {
+final case class MetricsRetryConfig(attempts: Int, initialBackoff: FiniteDuration, maxBackoff: FiniteDuration)
+
+final case class MetricsConfig(
+    prometheusUrl: String,
+    pollInterval: FiniteDuration,
+    queryTimeout: FiniteDuration,
+    observationWindow: FiniteDuration,
+    maxSampleAge: FiniteDuration,
+    retry: MetricsRetryConfig
+)
+object MetricsConfig {
+  val layer: URLayer[ControlPlaneConfig, MetricsConfig] =
+    ZLayer.fromFunction((config: ControlPlaneConfig) => config.metrics)
+  val module: TaskLayer[MetricsConfig] = ZLayer.make[MetricsConfig](ControlPlaneConfig.module, layer)
+}
+
+final case class ControlPlaneConfig(
+    server: ServerConfig,
+    api: ApiConfig,
+    postgres: PostgresConfig,
+    metrics: MetricsConfig,
+    scaling: ScalingConfig
+) {
   def validate: Either[String, ControlPlaneConfig] = {
     val sslModes = Set("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
     if (server.listenHost.trim.isEmpty || server.port < 1 || server.port > 65535)
@@ -54,7 +92,13 @@ final case class ControlPlaneConfig(server: ServerConfig, api: ApiConfig, postgr
         api.requestTimeout,
         postgres.statementTimeout,
         postgres.idleTransactionTimeout,
-        postgres.rollbackTimeout
+        postgres.rollbackTimeout,
+        metrics.pollInterval,
+        metrics.queryTimeout,
+        metrics.observationWindow,
+        metrics.maxSampleAge,
+        metrics.retry.initialBackoff,
+        metrics.retry.maxBackoff
       ).exists(_.length <= 0)
     ) Left("timeouts must be positive")
     else if (server.writeTimeout <= api.requestTimeout) Left("write timeout must exceed request timeout")
@@ -64,11 +108,27 @@ final case class ControlPlaneConfig(server: ServerConfig, api: ApiConfig, postgr
       postgres.database.trim.isEmpty || postgres.user.trim.isEmpty || postgres.poolMax < 1
     ) Left("invalid PostgreSQL configuration")
     else if (!sslModes(postgres.sslMode)) Left("invalid PostgreSQL sslmode")
-    else Right(this)
+    else if (!validHttpOrigin(metrics.prometheusUrl)) Left("invalid Prometheus URL")
+    else if (metrics.retry.attempts < 1 || metrics.retry.maxBackoff < metrics.retry.initialBackoff)
+      Left("invalid metrics retry configuration")
+    else if (metrics.maxSampleAge < metrics.pollInterval) Left("max sample age must cover at least one poll interval")
+    else scaling.validate.map(_ => this)
   }
+
+  private def validHttpOrigin(value: String): Boolean =
+    try {
+      val uri = java.net.URI.create(value)
+      Set("http", "https").contains(
+        uri.getScheme
+      ) && uri.getHost != null && uri.getQuery == null && uri.getFragment == null
+    } catch {
+      case _: IllegalArgumentException => false
+    }
 }
 
 object ControlPlaneConfig {
+  val module: TaskLayer[ControlPlaneConfig] = ZLayer.fromZIO(load("config.yaml"))
+
   def load(path: String): Task[ControlPlaneConfig] =
     for {
       content <- ZIO.attemptBlocking(Files.readString(Path.of(path)))
@@ -85,7 +145,11 @@ object ControlPlaneConfig {
       val server = asMap(required(root, "server"), "server")
       val api = asMap(required(root, "api"), "api")
       val postgres = asMap(required(root, "postgres"), "postgres")
-      ensureKeys(root, Set("server", "api", "postgres"), "root")
+      val metrics = asMap(required(root, "metrics"), "metrics")
+      val retry = asMap(required(metrics, "retry"), "metrics.retry")
+      val scaling = asMap(required(root, "scaling"), "scaling")
+      val thresholds = asMap(required(scaling, "thresholds"), "scaling.thresholds")
+      ensureKeys(root, Set("server", "api", "postgres", "metrics", "scaling"), "root")
       ensureKeys(
         server,
         Set(
@@ -116,6 +180,18 @@ object ControlPlaneConfig {
         ),
         "postgres"
       )
+      ensureKeys(
+        metrics,
+        Set("prometheus_url", "poll_interval", "query_timeout", "observation_window", "max_sample_age", "retry"),
+        "metrics"
+      )
+      ensureKeys(retry, Set("attempts", "initial_backoff", "max_backoff"), "metrics.retry")
+      ensureKeys(
+        scaling,
+        Set("min_replicas", "max_replicas", "step", "confirmation_windows", "cooldown", "thresholds"),
+        "scaling"
+      )
+      ensureKeys(thresholds, SignalName.policySignals.map(_.wireName), "scaling.thresholds")
       Right(
         ControlPlaneConfig(
           ServerConfig(
@@ -139,6 +215,30 @@ object ControlPlaneConfig {
             duration(postgres, "statement_timeout"),
             duration(postgres, "idle_transaction_timeout"),
             duration(postgres, "rollback_timeout")
+          ),
+          MetricsConfig(
+            string(metrics, "prometheus_url"),
+            duration(metrics, "poll_interval"),
+            duration(metrics, "query_timeout"),
+            duration(metrics, "observation_window"),
+            duration(metrics, "max_sample_age"),
+            MetricsRetryConfig(
+              integer(retry, "attempts"),
+              duration(retry, "initial_backoff"),
+              duration(retry, "max_backoff")
+            )
+          ),
+          ScalingConfig(
+            integer(scaling, "min_replicas"),
+            integer(scaling, "max_replicas"),
+            integer(scaling, "step"),
+            integer(scaling, "confirmation_windows"),
+            java.time.Duration.ofMillis(duration(scaling, "cooldown").toMillis),
+            SignalName.policySignals.map { signal =>
+              val threshold = asMap(required(thresholds, signal.wireName), s"threshold ${signal.wireName}")
+              ensureKeys(threshold, Set("lower", "upper"), s"threshold ${signal.wireName}")
+              signal -> ThresholdBand(decimal(threshold, "lower"), decimal(threshold, "upper"))
+            }.toMap
           )
         )
       )
@@ -170,6 +270,11 @@ object ControlPlaneConfig {
   private def long(mapping: Map[String, Any], key: String): Long = required(mapping, key) match {
     case number: Number => number.longValue()
     case value          => value.toString.toLong
+  }
+
+  private def decimal(mapping: Map[String, Any], key: String): Double = required(mapping, key) match {
+    case number: Number => number.doubleValue()
+    case value          => value.toString.toDouble
   }
 
   private def duration(mapping: Map[String, Any], key: String): FiniteDuration =

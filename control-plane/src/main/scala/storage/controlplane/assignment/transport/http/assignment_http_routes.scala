@@ -1,14 +1,11 @@
 package storage.controlplane.assignment.transport.http
 
-import sttp.model.StatusCode
-import sttp.tapir.generic.auto._
 import sttp.tapir.json.zio._
 import sttp.tapir.server.model.EndpointExtensions._
 import sttp.tapir.ztapir._
 import storage.controlplane.assignment.transport.dto.{AssignmentPublishRequest, AssignmentSnapshotDto, ErrorResponse}
 import storage.controlplane.config.ApiConfig
-import zio.json._
-import zio.{Chunk, ZIO}
+import zio.{Chunk, TaskLayer, URLayer, ZLayer}
 
 final class AssignmentHttpRoutes(handler: AssignmentHttpHandler, config: ApiConfig) {
   private val baseEndpoint = endpoint.in("assignments" / "current")
@@ -20,15 +17,16 @@ final class AssignmentHttpRoutes(handler: AssignmentHttpHandler, config: ApiConf
 
   private val publish = baseEndpoint.put
     .maxRequestBodyLength(config.maxBodyBytes)
-    .in(stringJsonBody)
+    .in(jsonBody[AssignmentPublishRequest])
     .out(jsonBody[AssignmentSnapshotDto])
     .errorOut(statusCode.and(jsonBody[ErrorResponse]))
-    .zServerLogic[Any](body =>
-      ZIO
-        .fromEither(body.fromJson[AssignmentPublishRequest])
-        .mapError(_ => StatusCode.BadRequest -> ErrorResponse("invalid_request"))
-        .flatMap(handler.publish)
-    )
+    .zServerLogic[Any](handler.publish)
 
   val endpoints: Chunk[ZServerEndpoint[Any, Any]] = Chunk(getCurrent, publish)
+}
+
+object AssignmentHttpRoutes {
+  val layer: URLayer[AssignmentHttpHandler & ApiConfig, AssignmentHttpRoutes] = ZLayer.derive[AssignmentHttpRoutes]
+  val module: TaskLayer[AssignmentHttpRoutes] =
+    ZLayer.make[AssignmentHttpRoutes](AssignmentHttpHandler.module, ApiConfig.module, layer)
 }

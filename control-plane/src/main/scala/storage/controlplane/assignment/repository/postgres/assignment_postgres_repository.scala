@@ -6,7 +6,7 @@ import storage.controlplane.assignment.domain.AssignmentError.{EpochConflict, In
 import storage.controlplane.assignment.domain.{AssignmentError, AssignmentSnapshot, Node, PartitionOwner}
 import storage.controlplane.assignment.service.AssignmentRepository
 import zio.interop.catz._
-import zio.{IO, Task}
+import zio.{IO, Task, TaskLayer, URLayer, ZLayer}
 
 final class AssignmentPostgresRepository(transactor: Transactor[Task]) extends AssignmentRepository {
   override def current: IO[AssignmentError, AssignmentSnapshot] =
@@ -77,4 +77,10 @@ final class AssignmentPostgresRepository(transactor: Transactor[Task]) extends A
       case assignmentError: AssignmentError => assignmentError
       case error                            => Unavailable(error)
     }
+}
+
+object AssignmentPostgresRepository {
+  val layer: URLayer[Transactor[Task], AssignmentRepository] = ZLayer.derive[AssignmentPostgresRepository]
+  val module: TaskLayer[AssignmentRepository] =
+    ZLayer.make[AssignmentRepository](PostgresDataSource.module, layer)
 }

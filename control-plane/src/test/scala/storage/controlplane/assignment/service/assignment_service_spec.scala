@@ -32,7 +32,8 @@ object AssignmentServiceSpec extends ZIOSpecDefault {
     test("publishes only the next complete epoch") {
       for {
         state <- Ref.make(initial)
-        service <- AssignmentService.make(new StubRepository(state, None))
+        activeEpoch <- Ref.make(0L)
+        service = AssignmentService(new StubRepository(state, None), activeEpoch)
         next = initial.copy(epoch = 2)
         published <- service.publish(1, next)
         activeEpoch <- service.epoch
@@ -42,7 +43,8 @@ object AssignmentServiceSpec extends ZIOSpecDefault {
     test("preserves repository epoch conflicts") {
       for {
         state <- Ref.make(initial)
-        service <- AssignmentService.make(new StubRepository(state, Some(EpochConflict)))
+        activeEpoch <- Ref.make(0L)
+        service = AssignmentService(new StubRepository(state, Some(EpochConflict)), activeEpoch)
         result <- service.publish(1, initial.copy(epoch = 2)).either
       } yield assertTrue(result == Left(EpochConflict))
     }

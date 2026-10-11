@@ -20,3 +20,29 @@ postgres:
   statement_timeout: 2.5s
   idle_transaction_timeout: 5s
   rollback_timeout: 1s
+metrics:
+  prometheus_url: http://prometheus:9090
+  poll_interval: 5s
+  query_timeout: 2s
+  observation_window: 30s
+  max_sample_age: 15s
+  retry:
+    attempts: 2
+    initial_backoff: 250ms
+    max_backoff: 1s
+scaling:
+  min_replicas: 1
+  max_replicas: 10
+  step: 1
+  confirmation_windows: 3
+  cooldown: 30s
+  thresholds:
+    requests_per_second: {lower: 20, upper: 80}
+    http_latency_p99: {lower: 0.05, upper: 0.2}
+    server_error_rate: {lower: 0.001, upper: 0.02}
+    overload_rate: {lower: 0.001, upper: 0.01}
+    active_requests: {lower: 8, upper: 48}
+    pool_acquire_p95: {lower: 0.01, upper: 0.1}
+    database_operation_p95: {lower: 0.05, upper: 0.25}
+    cpu_utilization: {lower: 0.35, upper: 0.8}
+    memory_utilization: {lower: 0.4, upper: 0.85}

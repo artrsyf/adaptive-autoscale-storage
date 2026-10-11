@@ -1,0 +1,314 @@
+{
+  "uid": "control-plane-overview",
+  "title": "Control Plane / System Overview",
+  "tags": ["storage", "control-plane", "advisory"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "time": {"from": "now-15m", "to": "now"},
+  "templating": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "01 / Advisory controller overview",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "How to read this dashboard",
+      "gridPos": {"x": 0, "y": 1, "w": 24, "h": 3},
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard visualizes the **exact aggregates evaluated by Control Plane**, not an independent Grafana policy. `ScaleOut` and `ScaleIn` are advisory only. Signal pressure is `evaluated value / upper threshold`; **1.0** reaches the scale-out boundary. Missing telemetry stays **No data** and changes the decision to `InsufficientData`."
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Controller status",
+      "gridPos": {"x": 0, "y": 4, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_controller_status == 1", "legendFormat": "{{status}}", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Advisory decision",
+      "gridPos": {"x": 4, "y": 4, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_decision == 1", "legendFormat": "{{decision}}", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "name", "colorMode": "background"},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "blue"}]}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "gauge",
+      "title": "Data completeness",
+      "gridPos": {"x": 8, "y": 4, "w": 4, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_data_completeness_ratio", "legendFormat": "complete", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "orange", "value": 0.9}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Current replicas",
+      "gridPos": {"x": 12, "y": 4, "w": 3, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_current_replicas", "legendFormat": "current", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Recommended",
+      "gridPos": {"x": 15, "y": 4, "w": 3, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_recommended_replicas", "legendFormat": "recommended", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"},
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "type": "gauge",
+      "title": "Confirmation",
+      "gridPos": {"x": 18, "y": 4, "w": 3, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_confirmation_progress_ratio", "legendFormat": "confirmation", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"mode": "absolute", "steps": [{"color": "blue"}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 9,
+      "type": "gauge",
+      "title": "Cooldown",
+      "gridPos": {"x": 21, "y": 4, "w": 3, "h": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_cooldown_remaining_seconds", "legendFormat": "cooldown", "instant": true}],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "max": 30, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 0.001}]}}, "overrides": []}
+    },
+    {
+      "id": 10,
+      "type": "row",
+      "title": "02 / Workload, state and decision timeline",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 8, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "state-timeline",
+      "title": "Validation workload stage",
+      "gridPos": {"x": 0, "y": 9, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "bench_controller_stage == 1", "legendFormat": "{{stage}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 12,
+      "type": "state-timeline",
+      "title": "Controller health timeline",
+      "gridPos": {"x": 8, "y": 9, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_controller_status == 1", "legendFormat": "{{status}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 13,
+      "type": "state-timeline",
+      "title": "Decision timeline",
+      "gridPos": {"x": 16, "y": 9, "w": 8, "h": 5},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_decision == 1", "legendFormat": "{{decision}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Offered load and observed cluster RPS",
+      "gridPos": {"x": 0, "y": 14, "w": 16, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "bench_offered_iterations_per_second", "legendFormat": "offered iterations/s"},
+        {"refId": "B", "expr": "storage_control_cluster_requests_per_second", "legendFormat": "observed HTTP RPS"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 12}}, "overrides": []}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Current vs recommended replicas",
+      "gridPos": {"x": 16, "y": 14, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_current_replicas", "legendFormat": "current"},
+        {"refId": "B", "expr": "storage_control_recommended_replicas", "legendFormat": "recommended"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"]}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 16,
+      "type": "row",
+      "title": "03 / Policy signals and configured thresholds",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 17,
+      "type": "bargauge",
+      "title": "Signal pressure / upper threshold",
+      "gridPos": {"x": 0, "y": 23, "w": 24, "h": 7},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_signal_pressure_ratio", "legendFormat": "{{signal}}"}],
+      "options": {"displayMode": "gradient", "orientation": "horizontal", "reduceOptions": {"calcs": ["lastNotNull"]}, "showUnfilled": true},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1.5, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 0.75}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Max per-PU RPS vs thresholds",
+      "gridPos": {"x": 0, "y": 30, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"requests_per_second\"}", "legendFormat": "max PU RPS"},
+        {"refId": "B", "expr": "storage_control_signal_upper_threshold{signal=\"requests_per_second\"}", "legendFormat": "upper"},
+        {"refId": "C", "expr": "storage_control_signal_lower_threshold{signal=\"requests_per_second\"}", "legendFormat": "lower"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "HTTP p95 / p99 vs p99 thresholds",
+      "gridPos": {"x": 12, "y": 30, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"http_latency_p95\"}", "legendFormat": "p95"},
+        {"refId": "B", "expr": "storage_control_signal_value{signal=\"http_latency_p99\"}", "legendFormat": "p99"},
+        {"refId": "C", "expr": "storage_control_signal_upper_threshold{signal=\"http_latency_p99\"}", "legendFormat": "p99 upper"},
+        {"refId": "D", "expr": "storage_control_signal_lower_threshold{signal=\"http_latency_p99\"}", "legendFormat": "p99 lower"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Server errors and overload vs thresholds",
+      "gridPos": {"x": 0, "y": 38, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"server_error_rate\"}", "legendFormat": "5xx rate"},
+        {"refId": "B", "expr": "storage_control_signal_upper_threshold{signal=\"server_error_rate\"}", "legendFormat": "5xx upper"},
+        {"refId": "C", "expr": "storage_control_signal_value{signal=\"overload_rate\"}", "legendFormat": "429 rate"},
+        {"refId": "D", "expr": "storage_control_signal_upper_threshold{signal=\"overload_rate\"}", "legendFormat": "429 upper"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "CPU and memory utilization vs thresholds",
+      "gridPos": {"x": 12, "y": 38, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"cpu_utilization\"}", "legendFormat": "CPU"},
+        {"refId": "B", "expr": "storage_control_signal_upper_threshold{signal=\"cpu_utilization\"}", "legendFormat": "CPU upper"},
+        {"refId": "C", "expr": "storage_control_signal_value{signal=\"memory_utilization\"}", "legendFormat": "memory"},
+        {"refId": "D", "expr": "storage_control_signal_upper_threshold{signal=\"memory_utilization\"}", "legendFormat": "memory upper"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1.2, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Active requests vs thresholds",
+      "gridPos": {"x": 0, "y": 46, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"active_requests\"}", "legendFormat": "active"},
+        {"refId": "B", "expr": "storage_control_signal_upper_threshold{signal=\"active_requests\"}", "legendFormat": "upper"},
+        {"refId": "C", "expr": "storage_control_signal_lower_threshold{signal=\"active_requests\"}", "legendFormat": "lower"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Pool acquisition and DB operation p95",
+      "gridPos": {"x": 12, "y": 46, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_signal_value{signal=\"pool_acquire_p95\"}", "legendFormat": "pool p95"},
+        {"refId": "B", "expr": "storage_control_signal_upper_threshold{signal=\"pool_acquire_p95\"}", "legendFormat": "pool upper"},
+        {"refId": "C", "expr": "storage_control_signal_value{signal=\"database_operation_p95\"}", "legendFormat": "DB p95"},
+        {"refId": "D", "expr": "storage_control_signal_upper_threshold{signal=\"database_operation_p95\"}", "legendFormat": "DB upper"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "04 / Data quality and freshness",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 54, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Data completeness",
+      "gridPos": {"x": 0, "y": 55, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_data_completeness_ratio", "legendFormat": "completeness"}],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1, "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 15}}, "overrides": []}
+    },
+    {
+      "id": 27,
+      "type": "timeseries",
+      "title": "Missing, stale, duplicate and unknown series",
+      "gridPos": {"x": 8, "y": 55, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_missing_signals", "legendFormat": "missing"},
+        {"refId": "B", "expr": "storage_control_stale_signals", "legendFormat": "stale"},
+        {"refId": "C", "expr": "storage_control_duplicate_signals", "legendFormat": "duplicate"},
+        {"refId": "D", "expr": "storage_control_unknown_nodes", "legendFormat": "unknown nodes"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Signal sample age",
+      "gridPos": {"x": 16, "y": 55, "w": 8, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_signal_age_seconds", "legendFormat": "{{signal}}"}],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 1}}, "overrides": []}
+    }
+  ]
+}

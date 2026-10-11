@@ -4,7 +4,7 @@ target: "http://router:8080"
 metrics_port: 9091
 # Число логических разделов (1–1024); должно совпадать у Router, исполнителей и генератора нагрузки.
 partitions: 128
-# Профиль темпа: constant — постоянный, ramp — рост, burst — кратковременный всплеск.
+# Профиль темпа: constant, ramp, burst или многофазный controller для advisory validation.
 scenario: "constant"
 # uniform — равномерный выбор ключей; hot — 80% итераций на ключи раздела 0.
 distribution: "uniform"

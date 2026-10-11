@@ -3,16 +3,21 @@ package storage.controlplane.app
 import storage.controlplane.assignment.service.{AssignmentRepository, AssignmentService}
 import storage.controlplane.assignment.transport.dto.ErrorResponse
 import storage.controlplane.config.ServerConfig
+import storage.controlplane.scaling.domain.ScalingConfig
+import storage.controlplane.scaling.service.ControllerService
 import zio.http.{Handler, Method, Response, Routes, Status}
 import zio.json._
-import zio.{Duration, ZIO}
+import storage.controlplane.assignment.repository.postgres.AssignmentPostgresRepository
+import zio.{Clock, Duration, TaskLayer, URLayer, ZIO, ZLayer}
 
-object OperationalRoutes {
-  def make(
-      repository: AssignmentRepository,
-      service: AssignmentService,
-      config: ServerConfig
-  ): Routes[Any, Response] =
+final class OperationalRoutes(
+    repository: AssignmentRepository,
+    service: AssignmentService,
+    controller: ControllerService,
+    scalingConfig: ScalingConfig,
+    config: ServerConfig
+) {
+  val routes: Routes[Any, Response] =
     Routes(
       Method.GET / "livez" -> Handler.fromResponse(Response.status(Status.Ok)),
       Method.GET / "readyz" -> Handler.fromZIO {
@@ -28,13 +33,28 @@ object OperationalRoutes {
           )
       },
       Method.GET / "metrics" -> Handler.fromZIO {
-        service.epoch.map { epoch =>
-          Response.text(
-            "# HELP storage_assignment_epoch Active assignment epoch.\n" +
-              "# TYPE storage_assignment_epoch gauge\n" +
-              s"storage_assignment_epoch $epoch\n"
-          )
-        }
+        for {
+          epoch <- service.epoch
+          snapshot <- controller.snapshot
+          now <- Clock.instant
+        } yield Response.text(ControllerMetrics.render(snapshot, scalingConfig, now, epoch))
       }
+    )
+}
+
+object OperationalRoutes {
+  val layer: URLayer[
+    AssignmentRepository & AssignmentService & ControllerService & ScalingConfig & ServerConfig,
+    OperationalRoutes
+  ] = ZLayer.derive[OperationalRoutes]
+
+  val module: TaskLayer[OperationalRoutes] =
+    ZLayer.make[OperationalRoutes](
+      AssignmentPostgresRepository.module,
+      AssignmentService.module,
+      ControllerService.module,
+      ScalingConfig.module,
+      ServerConfig.module,
+      layer
     )
 }

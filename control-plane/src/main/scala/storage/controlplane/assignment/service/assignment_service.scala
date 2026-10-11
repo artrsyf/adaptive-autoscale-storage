@@ -2,9 +2,10 @@ package storage.controlplane.assignment.service
 
 import storage.controlplane.assignment.domain.AssignmentError.InvalidAssignment
 import storage.controlplane.assignment.domain.{AssignmentError, AssignmentSnapshot}
-import zio.{IO, Ref, UIO, ZIO}
+import storage.controlplane.assignment.repository.postgres.AssignmentPostgresRepository
+import zio.{IO, Ref, TaskLayer, UIO, URLayer, ZIO, ZLayer}
 
-final class AssignmentService private (repository: AssignmentRepository, activeEpoch: Ref[Long]) {
+final class AssignmentService(repository: AssignmentRepository, activeEpoch: Ref[Long]) {
   def current: IO[AssignmentError, AssignmentSnapshot] =
     repository.current.tap(snapshot => recordEpoch(snapshot.epoch))
 
@@ -25,6 +26,13 @@ final class AssignmentService private (repository: AssignmentRepository, activeE
 }
 
 object AssignmentService {
-  def make(repository: AssignmentRepository): UIO[AssignmentService] =
-    Ref.make(0L).map(new AssignmentService(repository, _))
+  val layer: URLayer[AssignmentRepository, AssignmentService] = ZLayer.fromZIO(
+    for {
+      repository <- ZIO.service[AssignmentRepository]
+      activeEpoch <- Ref.make(0L)
+    } yield AssignmentService(repository, activeEpoch)
+  )
+
+  val module: TaskLayer[AssignmentService] =
+    ZLayer.make[AssignmentService](AssignmentPostgresRepository.module, layer)
 }

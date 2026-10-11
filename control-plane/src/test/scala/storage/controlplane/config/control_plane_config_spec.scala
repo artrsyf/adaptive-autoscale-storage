@@ -10,6 +10,9 @@ object ControlPlaneConfigSpec extends ZIOSpecDefault {
           config.server.port == 8080,
           config.api.maxBodyBytes == 1048576,
           config.postgres.poolMax == 4,
+          config.metrics.pollInterval.toSeconds == 5,
+          config.scaling.confirmationWindows == 3,
+          config.scaling.thresholds.size == 9,
           config.validate.isRight
         )
       }
