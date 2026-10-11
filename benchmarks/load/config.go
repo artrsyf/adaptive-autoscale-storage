@@ -32,7 +32,7 @@ func (configuredDuration *duration) UnmarshalYAML(unmarshal func(any) error) err
 type LoadConfig struct {
 	// Target — Базовый HTTP-адрес Router, доступный из контейнера генератора.
 	Target string `json:"target" yaml:"target"`
-	// Scenario — Профиль темпа: constant — постоянный, ramp — рост, burst — кратковременный всплеск.
+	// Scenario — Профиль темпа: constant, ramp, burst или многофазный controller для advisory validation.
 	Scenario string `json:"scenario" yaml:"scenario"`
 	// Distribution — uniform — равномерный выбор ключей; hot — 80% итераций на ключи раздела 0.
 	Distribution string `json:"distribution" yaml:"distribution"`

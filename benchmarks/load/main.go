@@ -88,8 +88,11 @@ func run() error {
 	if workloadConfig.Rate < 1 || workloadConfig.Rate > 100000 || workloadConfig.ReadPercent < 0 || workloadConfig.ReadPercent > 100 || workloadConfig.Records < 128 || workloadConfig.PayloadBytes < 16 || workloadConfig.PayloadBytes > 900000 || workloadConfig.Workers < 1 || workloadConfig.Workers > 4096 || workloadConfig.Duration <= 0 || workloadConfig.Warmup < 0 {
 		return fmt.Errorf("invalid workload settings")
 	}
-	if workloadConfig.Scenario != "constant" && workloadConfig.Scenario != "ramp" && workloadConfig.Scenario != "burst" {
+	if workloadConfig.Scenario != "constant" && workloadConfig.Scenario != "ramp" && workloadConfig.Scenario != "burst" && workloadConfig.Scenario != "controller" {
 		return fmt.Errorf("unknown scenario")
+	}
+	if workloadConfig.Scenario == "controller" && time.Duration(workloadConfig.Duration) < 3*time.Minute {
+		return fmt.Errorf("controller scenario requires at least three minutes")
 	}
 	if workloadConfig.Distribution != "uniform" && workloadConfig.Distribution != "hot" {
 		return fmt.Errorf("unknown distribution")
@@ -117,7 +120,8 @@ func run() error {
 	drops := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "bench_dropped_iterations_total", Help: "Scheduled iterations not started; generator concurrency or scheduler exhausted."}, []string{"phase"})
 	active := prometheus.NewGauge(prometheus.GaugeOpts{Name: "bench_active_workers", Help: "Active workload iterations."})
 	phase := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "bench_phase", Help: "Current phase, one hot."}, []string{"phase"})
-	registry.MustRegister(requests, latency, offered, drops, active, phase, prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	controllerStage := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "bench_controller_stage", Help: "Current controller validation stage, one hot."}, []string{"stage"})
+	registry.MustRegister(requests, latency, offered, drops, active, phase, controllerStage, prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	for _, phaseName := range []string{"seed", "warmup", "measure", "finished"} {
 		phase.WithLabelValues(phaseName).Set(0)
 		drops.WithLabelValues(phaseName)
@@ -131,6 +135,17 @@ func run() error {
 			phase.WithLabelValues(phaseLabel).Set(phaseActive)
 		}
 	}
+	controllerStages := []string{"inactive", "low", "steady", "ramp", "short_burst", "high", "recovery", "finished"}
+	setControllerStage := func(stageName string) {
+		for _, stageLabel := range controllerStages {
+			stageActive := 0.
+			if stageLabel == stageName {
+				stageActive = 1
+			}
+			controllerStage.WithLabelValues(stageLabel).Set(stageActive)
+		}
+	}
+	setControllerStage("inactive")
 	httpMux := http.NewServeMux()
 	httpMux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	httpMux.HandleFunc("/status", func(responseWriter http.ResponseWriter, httpRequest *http.Request) {
@@ -245,17 +260,10 @@ func run() error {
 		nextIterationAt := phaseStartedAt
 		phaseEndsAt := phaseStartedAt.Add(phase.duration)
 		for nextIterationAt.Before(phaseEndsAt) && operationContext.Err() == nil {
-			rate := float64(workloadConfig.Rate)
 			fraction := float64(nextIterationAt.Sub(phaseStartedAt)) / float64(phase.duration)
+			rate, stage := workloadRate(workloadConfig.Scenario, phase.name, float64(workloadConfig.Rate), fraction)
 			if phase.name == "measure" {
-				switch workloadConfig.Scenario {
-				case "ramp":
-					rate *= .2 + .8*fraction
-				case "burst":
-					if fraction >= .4 && fraction < .6 {
-						rate *= 3
-					}
-				}
+				setControllerStage(stage)
 			}
 			offered.Set(rate)
 			interval := time.Duration(float64(time.Second) / rate)
@@ -318,6 +326,7 @@ func run() error {
 	}
 	offered.Set(0)
 	setPhase("finished")
+	setControllerStage("finished")
 	runSummary.Finished = time.Now().UTC()
 	runSummary.Dropped = dropped.Load()
 	sort.Float64s(latencySamples)

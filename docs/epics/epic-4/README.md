@@ -2,9 +2,9 @@
 
 ## Статус
 
-Эпик запланирован как следующий инкремент после завершённого runtime-среза [эпика 3](../epic-3/README.md). Он использует существующие метрики и Scala 3/ZIO Control Plane, но не изменяет число processing unit и не публикует assignment автоматически.
+Эпик реализован в ветке `epic/4-observable-control-plane` после завершённого runtime-среза [эпика 3](../epic-3/README.md). Он использует существующие метрики и Scala 3/ZIO Control Plane, но не изменяет число processing unit и не публикует assignment автоматически. Контейнерная, нагрузочная и визуальная приёмка выполнена 11.10.2026; 12.10.2026 отдельными контейнерными сценариями дополнительно подтверждены все policy-trigger и безопасная деградация при недоступном Prometheus. Команды, результаты и причинный разбор приведены в [validation report](validation.md).
 
-Состав планируемых изменений и checklist для новой агентской сессии: [changelog](changelog.md).
+Фактический change set и continuation notes: [changelog](changelog.md).
 
 ## Цель и место в roadmap
 
@@ -77,6 +77,63 @@ ScaleOut / ScaleIn / Maintain / InsufficientData
 `queue_size` не моделируется через `active_requests`: отдельной очереди в текущем processing unit нет. Если очередь появится позднее, она должна получить собственный bounded metric и отдельную семантику.
 
 PromQL-запросы принадлежат Prometheus-адаптеру или его конфигурации. Доменная модель не содержит Prometheus metric names, labels или JSON API types. Перед фиксацией CPU/RAM query контейнерная проверка должна подтвердить фактические cAdvisor labels, а не полагаться на имя контейнера по памяти.
+
+## Как Control Plane оценивает систему
+
+Бизнесовая задача текущего Control Plane — ответить, достаточно ли кластеру имеющейся вычислительной ёмкости и стоит ли рекомендовать добавить или убрать одну processing unit. Это наблюдающий советник: он не запускает контейнеры, не вызывает Kubernetes или Docker API, не меняет assignment и не перемещает partitions.
+
+Каждый цикл начинается с чтения authoritative assignment из PostgreSQL. Assignment задаёт epoch и точный список processing unit, которые должны присутствовать в наблюдении. После этого Control Plane запрашивает Prometheus, строит состояние по каждой ожидаемой ноде и повторно читает assignment. Если за время сбора изменился epoch или состав нод, смешанный snapshot отбрасывается.
+
+Prometheus объединяет данные из трёх эксплуатационных контуров:
+
+- application-метрики processing unit дают фактический поток запросов, HTTP latency, статусы ответов и число исполняющихся запросов;
+- PostgreSQL adapter каждой processing unit отдельно измеряет ожидание соединения из pool и выполнение операции после получения соединения;
+- cAdvisor измеряет CPU и память контейнеров относительно их cgroup limits.
+
+Для policy используется наиболее неблагополучная processing unit: по каждому сигналу берётся максимум среди всех нод активного assignment. Такой подход не позволяет среднему значению скрыть hot partition или локальную деградацию одной ноды. Суммарный RPS кластера рассчитывается отдельно для наблюдаемости, но scaling policy оценивает максимальный per-node RPS.
+
+### Пороговая модель
+
+У каждого policy-сигнала есть два порога. Верхний означает давление, при котором требуется рассмотреть scale-out. Нижний означает достаточно свободное состояние для рассмотрения scale-in. Пространство между ними является hysteresis band и приводит к `Maintain`.
+
+| Сигнал | Lower | Upper | Эксплуатационный смысл |
+|---|---:|---:|---|
+| RPS наиболее загруженной processing unit | `20 req/s` | `80 req/s` | фактически обработанный поток на одну ноду |
+| HTTP p99 | `50ms` | `200ms` | пользовательская задержка в хвосте распределения |
+| server error rate | `0.1%` | `2%` | только ответы `5xx`; клиентские `4xx` не являются scaling-сигналом |
+| overload rate | `0.1%` | `1%` | доля `429`, показывающая насыщение admission |
+| active requests | `8` | `48` | исполняющаяся работа; не queue size |
+| pool acquisition p95 | `10ms` | `100ms` | ожидание свободного PostgreSQL connection |
+| DB operation p95 | `50ms` | `250ms` | сеть, locks, SQL и commit после получения connection |
+| CPU utilization | `35%` | `80%` | доля cgroup CPU quota processing unit |
+| memory utilization | `40%` | `85%` | доля cgroup memory limit processing unit |
+
+HTTP p95 также собирается и отображается, но не входит в policy v1. Для scaling используется p99, потому что средние значения и p95 могут оставаться нормальными при уже заметной деградации наиболее медленных запросов. `storage_active_requests` не называется очередью: отдельной очереди в runtime нет, и подмена её размера числом активных запросов дала бы ложную семантику.
+
+Текущие thresholds являются диагностической конфигурацией локального стенда, а не production SLO. Они выбраны так, чтобы нормальный режим имел заметный запас, а каждый trigger можно было воспроизводимо пересечь отдельным нагрузочным сценарием. CPU `80%` и memory `85%` оставляют запас под bursts и runtime overhead; active requests `48` составляют 75% от admission limit `64`; `429` при `1%` означает уже наблюдаемое отбрасывание работы; DB p95 `250ms` позволяет реагировать существенно раньше statement timeout `2.5s`. Lower thresholds намеренно заметно ниже upper: возврата из перегрузки недостаточно для scale-in, система должна быть устойчиво свободной.
+
+Перед production пороги должны быть повторно откалиброваны по SLO, измеренной ёмкости одной реплики, распределению ключей, времени запуска реплики, стоимости инфраструктуры и доступной ёмкости PostgreSQL. Фактическая проверка текущих значений приведена в [validation report](validation.md).
+
+### Формирование вердикта
+
+Policy сначала проверяет качество данных. Для каждой активной ноды должны присутствовать свежие и однозначные series всех обязательных сигналов. Недоступный Prometheus, missing или stale series, duplicate series, неизвестная нода либо изменение assignment во время сбора дают `InsufficientData`. Monitoring failure не делает Control Plane unready и не останавливает assignment API, но запрещает actionable recommendation.
+
+При полном состоянии применяются следующие правила:
+
+- `ScaleOut` становится кандидатом, если хотя бы один обязательный сигнал достиг upper threshold; логика между сигналами — OR;
+- `ScaleIn` становится кандидатом, только если все обязательные сигналы одновременно не выше lower thresholds; логика — AND;
+- `Maintain` означает hysteresis band, незавершённое подтверждение, активный cooldown либо достижение replica bounds;
+- `InsufficientData` означает, что безопасное решение по текущим данным невозможно.
+
+Кандидат должен повториться в трёх последовательных evaluation. Polling выполняется каждые `5s`, а rate и percentile сигналы уже рассчитаны по rolling window `30s`, поэтому краткий spike не превращается в немедленную рекомендацию. После подтверждённой рекомендации действует cooldown `30s`. Изменение ограничено одним шагом, `minReplicas=1`, `maxReplicas=10`.
+
+Решение объяснимо: вместе с направлением публикуются фактические значения, пересечённые thresholds, текущий и рекомендуемый replica count, assignment epoch, время оценки и блокирующие условия. Если одновременно нарушены HTTP p99, pool wait и error rate, в reasons присутствуют все три причины.
+
+### Что означает ScaleOut или ScaleIn
+
+`ScaleOut` и `ScaleIn` — immutable advisory-значения, а не команды инфраструктуре. Например, `currentReplicas=3` и `recommendedReplicas=4` означают только рекомендацию следующему actuator/reconciliation increment. Текущее число реплик определяется количеством нод в authoritative assignment; Control Plane не сверяется с Docker или Kubernetes и не утверждает, что рекомендуемая реплика уже создана.
+
+Последний controller snapshot атомарно хранится в ZIO `Ref`. В snapshot входят `SystemState`, решение, confirmation state, cooldown и служебные счётчики циклов. `Ref` обеспечивает согласованное чтение через HTTP и `/metrics`, но не превращает решение в mutable action. Это in-memory состояние: после рестарта confirmation и cooldown начинаются заново, Control Plane переходит в `collecting`/`InsufficientData` и обязан снова накопить свежие подтверждённые окна. История опубликованных метрик остаётся в Prometheus, но Prometheus не является хранилищем policy state.
 
 ## Доменная модель
 
@@ -205,6 +262,12 @@ GET /control/decision
 
 Идентификаторы запросов, raw PromQL и тексты ошибок не используются как labels.
 
+## High-level Grafana dashboard
+
+Отдельный provisioned dashboard `Control Plane / System Overview` показывает controller status, advisory decision, качество и возраст данных, current/recommended replicas, confirmation и cooldown. Временные графики используют опубликованные Control Plane значения и thresholds, то есть не реализуют вторую независимую policy в Grafana. Отдельно отображаются workload stage, controller/decision timelines, RPS, p95/p99, error/overload rate, CPU/RAM, active requests, pool и DB latency.
+
+Значения каждого policy signal дополнительно нормализуются как `value / upper threshold` для общего bar gauge. Отсутствующий сигнал не подменяется нулём. Визуальная приёмка выполняется на размеченном workload `controller` с фазами low, steady, ramp, short burst, sustained high и recovery. Снимки и разбор интервалов добавляются только после фактического прогона.
+
 ## Критерии готовности
 
 - domain/service код не зависит от Prometheus JSON, HTTP, Tapir или PostgreSQL;
@@ -217,6 +280,7 @@ GET /control/decision
 - существующие assignment API, fencing и CRUD smoke остаются неизменными;
 - `make check`, контейнерные Control Plane integration tests и `make test-all` проходят;
 - диагностические `constant`, `ramp` и `burst` прогоны демонстрируют наблюдаемое изменение recommendation без actuation;
+- отдельный `controller` workload размечает фазы нагрузки, а новый dashboard проверен скриншотами всех панелей и причинным разбором каждого интервала;
 - документация фиксирует фактические PromQL, config и validation evidence, не выдавая диагностический прогон за сравнительный эксперимент.
 
 ## Путь после эпика

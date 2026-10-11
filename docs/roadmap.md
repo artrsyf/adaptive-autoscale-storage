@@ -10,7 +10,9 @@
 
 [Эпик 3](epics/epic-3/README.md) реализует A4 на runtime: Scala 3/ZIO-модуль assignment в Control Plane, атомарную публикацию snapshot, обновляемую карту Router и PostgreSQL-backed fencing. Полноценный control loop, прикладной Scala DSL и автоскейлинг не реализованы; способ развёртывания DSL остаётся открытым.
 
-Следующий рабочий инкремент — [эпик 4](epics/epic-4/README.md): наблюдающий Control Plane v1. Он использует существующую наблюдаемость B1, строит `SystemState` из Prometheus и выдаёт защищённое от неполных данных и колебаний advisory-решение `ScaleOut / ScaleIn / Maintain / InsufficientData`. Эпик закрывает B3 и подготавливает decision-ядро B5, но не изменяет replicas и assignment. Kubernetes baseline B2/B4 и actuator/reconciliation остаются следующими самостоятельными этапами.
+[Эпик 4](epics/epic-4/README.md) завершил наблюдающий Control Plane v1: он использует существующую наблюдаемость B1, строит `SystemState` из Prometheus и выдаёт защищённое от неполных данных и колебаний advisory-решение `ScaleOut / ScaleIn / Maintain / InsufficientData`. Эпик закрывает B3 и подготавливает decision-ядро B5, но не изменяет replicas и assignment.
+
+Следующий самостоятельный инкремент — [эпик 5: Kubernetes static baseline и placement contract](epics/epic-5/README.md), который закрывает инфраструктурный фундамент B2 без HPA и actuator. CPU/HPA baseline из B4 следует вводить только после явного membership/reconciliation contract: replica count сам по себе не обновляет authoritative assignment, а scale-in без draining может удалить текущего владельца partition.
 
 Номера исходных исследовательских эпиков не задают очередность разработки: наблюдаемость перенесена в текущий эпик, Kafka и кэши — после ранних исследований. Новые рабочие эпики получают собственные границы и критерии проверки в `docs/epics/`.
 
@@ -203,6 +205,8 @@ partition load
 
 Теория: Pod, Deployment, ReplicaSet, Service, readiness/liveness, requests/limits, scheduler.
 
+Рабочая спецификация следующего инкремента: [эпик 5](epics/epic-5/README.md). Он создаёт статический baseline и placement contract; HPA намеренно остаётся за его границами.
+
 ### B3. Control Plane v1
 
 ```text
@@ -211,7 +215,7 @@ Metrics → State Aggregator → SystemState → Decision
 
 Теория: control plane/data plane, feedback loop, observable state, sampling interval, aggregation.
 
-Рабочая спецификация следующего инкремента: [эпик 4](epics/epic-4/README.md). Первая реализация работает в advisory-режиме, чтобы проверить сбор состояния и policy независимо от инфраструктурного actuator.
+Рабочая реализация: [эпик 4](epics/epic-4/README.md). Она работает в advisory-режиме, чтобы проверить сбор состояния и policy независимо от инфраструктурного actuator.
 
 ### B4. Static + CPU-based Scaling
 

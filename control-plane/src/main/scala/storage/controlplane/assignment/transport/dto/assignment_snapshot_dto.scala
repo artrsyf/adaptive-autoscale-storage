@@ -1,27 +1,30 @@
 package storage.controlplane.assignment.transport.dto
 
 import storage.controlplane.assignment.domain.{AssignmentSnapshot, Node, PartitionOwner}
-import zio.json.{jsonField, jsonNoExtraFields, DeriveJsonCodec, JsonCodec}
+import sttp.tapir.Schema
+import tofu.logging.Loggable
+import tofu.logging.derivation.derived
+import zio.json.{jsonMemberNames, jsonNoExtraFields, JsonCodec, SnakeCase}
 
 @jsonNoExtraFields
-final case class AssignmentNodeDto(id: String, url: String)
-object AssignmentNodeDto {
-  implicit val codec: JsonCodec[AssignmentNodeDto] = DeriveJsonCodec.gen[AssignmentNodeDto]
-}
+@jsonMemberNames(SnakeCase)
+final case class AssignmentNodeDto(id: String, url: String) derives JsonCodec, Loggable, CanEqual, Schema
 
 @jsonNoExtraFields
-final case class PartitionAssignmentDto(partition: Int, @jsonField("node_id") nodeId: String)
-object PartitionAssignmentDto {
-  implicit val codec: JsonCodec[PartitionAssignmentDto] = DeriveJsonCodec.gen[PartitionAssignmentDto]
-}
+@jsonMemberNames(SnakeCase)
+final case class PartitionAssignmentDto(partition: Int, nodeId: String) derives JsonCodec, Loggable, CanEqual, Schema
 
 @jsonNoExtraFields
+@jsonMemberNames(SnakeCase)
 final case class AssignmentSnapshotDto(
     epoch: Long,
-    @jsonField("partition_count") partitionCount: Int,
+    partitionCount: Int,
     nodes: List[AssignmentNodeDto],
     assignments: List[PartitionAssignmentDto]
-) {
+) derives JsonCodec,
+      Loggable,
+      CanEqual,
+      Schema {
   def toDomain: AssignmentSnapshot =
     AssignmentSnapshot(
       epoch,
@@ -32,8 +35,6 @@ final case class AssignmentSnapshotDto(
 }
 
 object AssignmentSnapshotDto {
-  implicit val codec: JsonCodec[AssignmentSnapshotDto] = DeriveJsonCodec.gen[AssignmentSnapshotDto]
-
   def fromDomain(snapshot: AssignmentSnapshot): AssignmentSnapshotDto =
     AssignmentSnapshotDto(
       snapshot.epoch,

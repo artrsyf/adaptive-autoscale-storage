@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('','constant','ramp','burst','db-lock')][string]$Scenario = '',
+    [ValidateSet('','constant','ramp','burst','controller','db-lock')][string]$Scenario = '',
     [ValidateSet('','uniform','hot')][string]$Distribution = '',
     [int]$Rate = 0,
     [int]$Seconds = 0,
@@ -31,6 +31,7 @@ try {
     $Nodes = @($compose.services.PSObject.Properties.Name | Where-Object { $_ -match '^processing-unit-' }).Count
     $endpoints = @{ prometheus=$Prometheus; grafana=$Grafana; project=$compose.name; database_user=$compose.services.postgres.environment.POSTGRES_USER; database=$compose.services.postgres.environment.POSTGRES_DB }
     if ($Scenario -eq "db-lock" -and $Seconds -gt 0 -and $Seconds -lt 30) { throw "db-lock requires at least 30 seconds of measurement." }
+    if ($Scenario -eq "controller" -and $Seconds -gt 0 -and $Seconds -lt 180) { throw "controller requires at least 180 seconds of measurement." }
     Invoke-StorageCompose stop load
     Invoke-StorageCompose up -d --build --wait --remove-orphans
     $before = @(Get-ChildItem -LiteralPath results -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
@@ -77,7 +78,8 @@ try {
     Invoke-StorageCompose images --format json | Set-Content (Join-Path $path 'images.json')
     Copy-Item processing-unit/config.yaml (Join-Path $path "processing-unit.yaml")
     Copy-Item router/config.yaml (Join-Path $path "router.yaml")
-    $selectors = @('storage_requests_total','storage_request_duration_seconds_bucket','storage_partition_requests_total','storage_pool_connections','storage_pool_acquire_seconds_bucket','storage_db_operation_seconds_bucket','storage_pg_activity_connections','storage_pg_blocking_sessions','storage_pg_statements_calls','storage_pg_statements_execution_seconds','storage_pg_wal_bytes','container_cpu_usage_seconds_total{container_label_com_docker_compose_project="PROJECT_NAME"}','container_memory_working_set_bytes{container_label_com_docker_compose_project="PROJECT_NAME"}','bench_requests_total','bench_dropped_iterations_total','up')
+    Copy-Item control-plane/config.yaml (Join-Path $path "control-plane.yaml")
+    $selectors = @('storage_requests_total','storage_request_duration_seconds_bucket','storage_partition_requests_total','storage_pool_connections','storage_pool_acquire_seconds_bucket','storage_db_operation_seconds_bucket','storage_control_controller_status','storage_control_decision','storage_control_signal_value','storage_control_signal_upper_threshold','storage_control_signal_lower_threshold','storage_control_signal_pressure_ratio','storage_control_cluster_requests_per_second','storage_control_data_completeness_ratio','storage_control_missing_signals','storage_control_stale_signals','storage_control_duplicate_signals','storage_control_unknown_nodes','storage_control_signal_age_seconds','storage_control_current_replicas','storage_control_recommended_replicas','storage_control_confirmation_progress_ratio','storage_control_cooldown_remaining_seconds','storage_pg_activity_connections','storage_pg_blocking_sessions','storage_pg_statements_calls','storage_pg_statements_execution_seconds','storage_pg_wal_bytes','container_cpu_usage_seconds_total{container_label_com_docker_compose_project="PROJECT_NAME"}','container_memory_working_set_bytes{container_label_com_docker_compose_project="PROJECT_NAME"}','bench_requests_total','bench_dropped_iterations_total','bench_controller_stage','up')
     $snapshots = @{}
     foreach ($selector in $selectors) {
         $selector = $selector.Replace("PROJECT_NAME", $endpoints.project)
@@ -85,7 +87,8 @@ try {
         $snapshots[$selector] = Invoke-RestMethod "$( $endpoints.prometheus )/api/v1/query_range?query=$encodedQuery&start=$start&end=$end&step=5s"
     }
     $snapshots | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $path 'prometheus.json')
-    $url = "$( $endpoints.grafana )/d/storage-baseline?from=$($start * 1000)&to=$($end * 1000)"
+    $dashboardUID = if ($Scenario -eq 'controller') { 'control-plane-overview' } else { 'storage-baseline' }
+    $url = "$( $endpoints.grafana )/d/$($dashboardUID)?from=$($start * 1000)&to=$($end * 1000)"
     $url | Set-Content (Join-Path $path 'dashboard-url.txt')
     Write-Output "Results: $path"
     Write-Output "Dashboard: $url"
