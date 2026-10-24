@@ -22,10 +22,11 @@
 - Полная приёмка закрыла Compose regression, Kubernetes restart matrix, три нагрузочных сценария, visual QA Grafana, resource headroom и Helm rollback/reapply; доказательства записаны в `validation.md`.
 - Load Job теперь остаётся Running после формирования результатов, а namespace-scoped operator имеет необходимый `pods/exec` для `kubectl cp`; runtime ServiceAccount приложений по-прежнему tokenless.
 - Разрушительная clean-install проверка выявила и устранила deadlock `post-install` bootstrap с readiness Router. Актуальный chart использует обычный bootstrap Job на install и `post-upgrade` hook на обновлении; повторный install на новых PVC и revision 2 прошли автоматически, исходные документы восстановлены из проверенного backup.
+- Добавлен базовый GitHub CI без deployment: четыре Go-модуля, Scala Control Plane и install/upgrade render Helm chart проверяются независимыми jobs с read-only permissions.
 
 ## Продолжение
 
-1. Добавить базовый GitHub CI для форматирования, сборки, vet и unit tests без автоматического deployment.
+1. Оставить deployment вне CI до появления удалённого окружения и явного контракта credentials/registry.
 2. Не переносить локальные baseline limits в production без отдельного sizing на целевой multi-node среде.
 
 Change set зафиксирован в ветке `epic/5-kubernetes-baseline`; merge в `master` не выполнялся.

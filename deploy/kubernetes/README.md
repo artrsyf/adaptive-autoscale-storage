@@ -58,4 +58,4 @@ k3s-kubectl --context autoscale-storage get ingress router -o jsonpath='{.status
 
 Локальное приложение должно сопоставить полученный адрес с `api.autoscale-storage.localhost` через hosts/DNS. Для разовой проверки подходит `curl --resolve`; после перезапуска WSL адрес следует проверить повторно. Клиенту также нужно доверять `results/kubernetes/tls/router.crt`.
 
-`assignment-bootstrap` оформлен как идемпотентный `post-install,post-upgrade` Helm hook. Helm удаляет предыдущий hook Job перед следующим запуском, а Job самостоятельно не меняет topology после уже опубликованного epoch.
+`assignment-bootstrap` является обычным Job при initial install, чтобы публикация assignment могла разблокировать readiness Router до завершения Helm install. При upgrade тот же manifest становится идемпотентным `post-upgrade` hook; Helm удаляет предыдущий hook Job перед следующим запуском, а Job самостоятельно не меняет topology после уже опубликованного epoch.

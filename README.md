@@ -116,6 +116,8 @@ Partition = первые 8 байт SHA-256 от UTF-8 `partition_key`, unsigned
 
 Корневой `Makefile` объединяет четыре независимых Go-модуля и Scala-модуль Control Plane. Нужны GNU Make, Go, JDK 21, sbt и PowerShell 7 (`pwsh`) в PATH; для контейнерных команд — работающий Docker Desktop/WSL2 и настроенный `.env`. На Windows host race-тесты дополнительно требуют CGO и C-компилятор.
 
+GitHub Actions выполняет базовые проверки Go, Scala и Helm для каждого push и pull request без deployment и без доступа к локальному k3s. Состав jobs и намеренно исключённые stateful-проверки описаны в [docs/ci.md](docs/ci.md).
+
 ```powershell
 make test          # Go-тесты четырёх модулей и Scala-тесты Control Plane
 make check         # Форматирование, сборка, vet и тесты всех модулей

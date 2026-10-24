@@ -6,6 +6,7 @@
 |---|---|
 | [Текущая архитектура](architecture.md) | Приложения, слои, зависимости и полный путь запроса с диаграммами и ссылками на код |
 | [Roadmap](roadmap.md) | Каноническая последовательность развития, исследовательские этапы и ближайшая цель |
+| [Continuous Integration](ci.md) | GitHub Actions jobs, toolchain и границы проверок без deployment |
 | [Описание ВКР](vkrm.md) | Теоретическая модель, обоснования и исследовательские вопросы |
 
 ## Документы эпиков
@@ -23,7 +24,7 @@
 - [Эпик 5 — k3s static baseline](epics/epic-5/README.md): принятый Helm baseline с изолированным namespace, стабильной identity Processing Units и placement contract без автоматического масштабирования; clean install, upgrade/rollback, нагрузки, recovery, observability и Compose regression проверены; [валидация](epics/epic-5/validation.md).
 - [Каталог исследовательских эпиков](epics/planned.md): подробные задачи будущих этапов; не перечень завершённых работ.
 
-Эпик 5 завершён; ближайший инфраструктурный шаг — базовый GitHub CI без deployment, зафиксированный в его [changelog](epics/epic-5/changelog.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
+Эпик 5 завершён; базовый GitHub CI без deployment описан в [ci.md](ci.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
 
 ## Правила актуализации
 
