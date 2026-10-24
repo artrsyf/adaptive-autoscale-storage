@@ -20,10 +20,10 @@
 - [Эпик 3 — управляемый assignment и fencing](epics/epic-3/README.md): Control Plane snapshot, обновление Router и PostgreSQL-backed запрет stale writes.
 - [Эпик 4 — наблюдающий Control Plane v1](epics/epic-4/README.md): завершённый advisory-инкремент, который агрегирует Prometheus-метрики и выдаёт объяснимые scaling decisions без изменения инфраструктуры; [validation evidence](epics/epic-4/validation.md).
   - [Планируемый change set и продолжение](epics/epic-4/changelog.md): feature-level задачи, тестовые сценарии, порядок реализации и границы следующей сессии.
-- [Эпик 5 — k3s static baseline](epics/epic-5/README.md): текущий инкремент с изолированным namespace, стабильной identity Processing Units и placement contract без автоматического масштабирования; [валидация](epics/epic-5/validation.md).
+- [Эпик 5 — k3s static baseline](epics/epic-5/README.md): принятый Helm baseline с изолированным namespace, стабильной identity Processing Units и placement contract без автоматического масштабирования; clean install, upgrade/rollback, нагрузки, recovery, observability и Compose regression проверены; [валидация](epics/epic-5/validation.md).
 - [Каталог исследовательских эпиков](epics/planned.md): подробные задачи будущих этапов; не перечень завершённых работ.
 
-Актуальная точка продолжения: [рабочая спецификация эпика 5](epics/epic-5/README.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
+Эпик 5 завершён; ближайший инфраструктурный шаг — базовый GitHub CI без deployment, зафиксированный в его [changelog](epics/epic-5/changelog.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
 
 ## Правила актуализации
 

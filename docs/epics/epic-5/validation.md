@@ -31,21 +31,37 @@
 
 Исторические проверки Kustomize и recording rules выше описывают первоначальный rollout. Актуальный runtime использует Helm и отдельные Docker/Kubernetes реализации `PrometheusQuerySet`; старые rules и Kustomize composition удалены.
 
+## Финальная приёмка — 24.10.2026
+
+- `make test-all` — PASS. Прошли форматирование, сборка, vet и unit tests четырёх Go-модулей, 33 Scala tests, race/PostgreSQL integration tests Processing Unit, race tests Router, container tests Control Plane и внешний Compose CRUD smoke. Compose stack оставлен запущенным согласно контракту target.
+- Restart matrix — PASS: Router, `processing-unit-2`, Control Plane и Prometheus были пересозданы и вернулись Ready; после пересоздания `postgres-0` с тем же PVC контрольный документ сохранил точную revision и был удалён через API.
+- Prometheus после restart показывал девять targets `up`; assignment во всех сценариях сохранил epoch 2, 128 partitions и три authoritative node.
+- Kubernetes load acceptance сохранён под игнорируемым `results/kubernetes/acceptance/20261024/`: `constant` — 7263 successful, 0 errors, 0 dropped, p95 3.80 ms, p99 6.24 ms; `ramp` — 4362 successful, 0 errors, 0 dropped, p95 5.41 ms, p99 7.41 ms; `burst` с пиком 300 iterations/s — 10176 successful, 0 errors, 0 dropped, p95 7.21 ms, p99 12.02 ms.
+- Во время контрольного Job Control Plane получил все 30 node/signal samples: completeness 1.0, missing 0, все десять `storage_control_signal_present` равны 1, controller `healthy`, decision `Maintain`. После истечения activity windows dashboard ожидаемо возвращается в `InsufficientData`, не подменяя отсутствующие series нулями.
+- Штатный workflow архивирования исправлен и проверен: `hold: true` удерживает Pod после записи результатов, scoped operator получает только дополнительный namespace subresource `pods/exec`, `kubectl cp` копирует `config.json`, `metrics.prom`, `requests.jsonl` и `summary.json`, после чего удаляется точный Job. Runtime ServiceAccount остаётся без API token.
+- Visual QA двух provisioned dashboards — PASS. `Storage / Load & Bottlenecks` показывал три Processing Unit, epoch 2, offered peak 300, completed peak 237.62 req/s, нулевые drops и только HTTP 200. `Control Plane / System Overview` корректно показал timeline workload/controller/decision, а Kubernetes placement — desired/ready/available 3 рядом с authoritative nodes 3 и advisory recommendation.
+- За 30-минутное окно с нагрузками и рестартами максимумы оставались ниже limits: Processing Unit около 0.07/0.5 CPU и 8.2/192 MiB каждый; Router 0.11/0.5 CPU и 8.0/192 MiB; PostgreSQL 0.20/1 CPU и 67.5/768 MiB; load generator 0.10/2 CPU и 9.0/384 MiB. Самые заметные monitoring/application значения: Control Plane 0.21/0.5 CPU и 232/384 MiB, Grafana 0.06/0.5 CPU и 190/256 MiB, Prometheus 0.07/0.5 CPU и 137/512 MiB. Текущие limits достаточны для baseline; это не sizing production-нагрузки.
+- Helm rollback с ревизии 6 на содержимое ревизии 5 создал успешную ревизию 7 без потери PVC или assignment. Повторный документированный apply восстановил актуальный chart как deployed revision 8; внешний TLS Ingress CRUD после rollback/reapply — PASS.
+
 ## Обнаружено и исправлено во время первого rollout
 
 - sbt launcher имел mode `0744`, несовместимый с runtime UID 65532; Dockerfile устанавливает `0755`.
 - Именованные users внешних images не проходили `runAsNonRoot`; зафиксированы числовые UID/GID.
 - PostgreSQL entrypoint требует стандартные capabilities для chown PVC и перехода к postgres UID; `drop: ALL` оставлен у остальных контейнеров, но снят у PostgreSQL.
-- После исправления шаблона первый уже crashlooping PostgreSQL Pod пришлось пересоздать вручную с сохранением PVC. Clean apply ещё должен подтвердить, что этот recovery-шаг больше не нужен.
+- После исправления шаблона первый уже crashlooping PostgreSQL Pod пришлось пересоздать вручную с сохранением PVC. Последующая clean install на новом PVC подтвердила, что актуальный шаблон больше не требует этого recovery-шага.
 - Helm adoption сохранял отсутствующие в chart поля прежнего Prometheus StatefulSet; точечный migration step удаляет legacy rules volume до очистки сгенерированного ConfigMap.
 - Первая версия cleanup-команды неверно экранировала JSONPath на границе PowerShell/WSL. Release был успешно обновлён, но wrapper завершился ошибкой после rollout; прямой вызов `kubectl` с явным kubeconfig исправил границу, а следующая полная ревизия 4 завершилась с кодом 0.
 
-## Не выполнено
+## Clean install на пустом PVC — 24.10.2026
 
-- Длительные `constant`, `ramp`, `burst` нагрузки и архивирование результатов.
-- Restart/failure matrix для Router, Processing Unit, Control Plane, Prometheus и PostgreSQL.
-- Визуальная проверка новых Kubernetes-панелей Grafana.
-- Полный Compose regression и `make test-all`. `make fmt-check` подтверждает gofmt, но общий `scalafmtCheckAll` остаётся красным на накопленном наборе неизменённых Scala-файлов; файлы текущего change set отформатированы отдельно.
-- Экспериментальная калибровка requests/limits и измерение monitoring/load-generator headroom.
+- Перед разрушительной проверкой создан и проверен custom-format PostgreSQL dump: 4096 документов, 186533 bytes, SHA-256 `F68A3D6A36BC0FD0B53279E44AE6C8A8AA14D214E272DC78CEA8247849E88145`. Backup хранится в ignored `results/kubernetes/acceptance/20261024/pre-clean-install/storage.dump`.
+- Первый запуск на пустом namespace выявил цикл готовности: Router требовал epoch 2, а `post-install` bootstrap hook ожидал готовности обычных ресурсов Helm. `--atomic` корректно удалил неуспешный release; пустые PVC и namespace были удалены перед повтором.
+- Bootstrap template исправлен: на initial install он является обычным Job и запускается параллельно с workload, на upgrade становится идемпотентным `post-upgrade` hook. Install/upgrade render-профили и `helm lint` прошли.
+- Повторный документированный `make k3s-up` с полной сборкой и импортом четырёх image создал новый namespace и новые PVC `d6083043-444d-4b8c-a04f-e6d3992b7dc3` / `d5aa4196-8f3b-4899-8764-bbdcd0492baa`. Helm revision 1 завершилась `deployed` без ручного изменения ресурсов; bootstrap Job опубликовал epoch 2, 128 partitions и три node, все постоянные workload достигли Ready.
+- Свежая таблица `documents` содержала 0 строк; внешний TLS CRUD create/get/delete через Ingress — PASS.
+- После проверки из backup восстановлены все 4096 исходных документов; один восстановленный документ успешно прочитан через Router с сохранённой revision. Assignment bootstrap data нового стенда не перезаписывались.
+- Повторный `Apply -SkipBuild` создал deployed revision 2, успешно выполнил `post-upgrade` bootstrap и сохранил данные/epoch. Таким образом initial install и последующий upgrade проверены одним актуальным chart.
 
-Текущий smoke подтверждает функциональную связность baseline, но не является performance result и не закрывает эпик целиком.
+Все критерии эпика 5 выполнены.
+
+Нагрузочные числа выше являются acceptance evidence локального single-node baseline, а не сравнительным performance result и не production sizing.

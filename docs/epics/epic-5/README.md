@@ -46,7 +46,7 @@ Control Plane использует общий `PrometheusQuerySet`, которы
 | Assignment node ID | совпадает с application node ID |
 | Источник истины | опубликованный assignment snapshot в PostgreSQL, не replica count Kubernetes |
 
-Миграция создаёт исходный Compose-совместимый epoch 1. Идемпотентный bootstrap Job вызывает Assignment HTTP API и публикует epoch 2 с адресами StatefulSet. При повторном apply и epoch больше 1 Job не меняет topology. Это промежуточное ограничение существующего API: пустое assignment-состояние пока не поддерживается.
+Миграция создаёт исходный Compose-совместимый epoch 1. Идемпотентный bootstrap Job вызывает Assignment HTTP API и публикует epoch 2 с адресами StatefulSet. При initial install это обычный Helm resource, который запускается параллельно с workload и разрывает зависимость готовности Router от assignment; при upgrade тот же шаблон становится `post-upgrade` hook. При epoch больше 1 Job не меняет topology. Это промежуточное ограничение существующего API: пустое assignment-состояние пока не поддерживается.
 
 ## Состав поставки
 
@@ -55,7 +55,7 @@ Control Plane использует общий `PrometheusQuerySet`, которы
 - application configs, migrations, exporter queries и dashboards поступают из канонических файлов через `--set-file`; Helm values хранят только имена существующих Secrets, images, Ingress и storage settings;
 - PostgreSQL и Prometheus используют PVC `local-path`; Processing Units используют StatefulSet; остальные runtime-компоненты — Deployment;
 - startup/readiness/liveness probes используют фактические operational endpoints;
-- CronJob `load` хранится с `suspend: true` и служит шаблоном для отдельных load Jobs;
+- CronJob `load` хранится с `suspend: true` и служит шаблоном для отдельных load Jobs; после прогона генератор остаётся запущенным, чтобы результаты можно было скопировать до явного удаления Job;
 - Grafana показывает Kubernetes desired/ready/available replicas рядом с authoritative node count и advisory recommendation;
 - Docker Compose остаётся быстрым regression-стендом; запуск без `--metrics-profile` использует прежние Docker cAdvisor-запросы, поэтому существующий способ запуска совместим.
 
@@ -75,17 +75,22 @@ k3s-kubectl --context autoscale-storage get pods
 k3s-kubectl --context autoscale-storage port-forward service/grafana 3000:3000
 ```
 
-Одноразовый нагрузочный Job создаётся из suspend CronJob с уникальным именем. Результаты нужно скопировать из Pod до его удаления; они не считаются принятыми автоматически.
+Одноразовый нагрузочный Job создаётся из suspend CronJob с уникальным именем. После записи итогового `summary.json` генератор продолжает отдавать метрики и оставляет Pod в состоянии Running. Результаты нужно скопировать из контейнера `load` до явного удаления Job; они не считаются принятыми автоматически.
 
 ```bash
 k3s-kubectl --context autoscale-storage create job --from=cronjob/load load-constant
+load_pod=$(k3s-kubectl --context autoscale-storage get pod -l job-name=load-constant -o jsonpath='{.items[0].metadata.name}')
+k3s-kubectl --context autoscale-storage cp "${load_pod}:/results" ./results/kubernetes/load-constant -c load
+k3s-kubectl --context autoscale-storage delete job load-constant
 ```
+
+Scoped operator получает `pods/exec` только для обслуживающих операций внутри namespace; это требуется механизму `kubectl cp`. Runtime ServiceAccount приложений по-прежнему не имеет API token и не получает этот доступ.
 
 ## Статус и критерии приёмки
 
-На 24.10.2026 chart принят Helm в существующем namespace, повторный upgrade проходит автоматически, TLS Ingress и внешний CRUD проверены, а Kubernetes Prometheus profile возвращает CPU/RAM для трёх Processing Unit. Активный assignment сохранил epoch 2 и 128 partitions. Длительные нагрузки, полная restart matrix, visual QA и Compose regression остаются незавершёнными. Фактические доказательства и ограничения перечислены в [validation.md](validation.md), состав изменений — в [changelog.md](changelog.md).
+На 24.10.2026 эпик принят полностью. Chart проходит initial install на пустом namespace/PVC и повторный upgrade без ручной коррекции Pod; rollback, TLS Ingress, внешний CRUD, `constant`/`ramp`/`burst`, полная restart matrix, visual QA и Compose regression пройдены. Kubernetes Prometheus profile возвращает CPU/RAM для трёх Processing Unit, активный assignment сохраняет epoch 2 и 128 partitions. Фактические доказательства и ограничения перечислены в [validation.md](validation.md), состав изменений — в [changelog.md](changelog.md).
 
-Эпик считается полностью завершённым после:
+Выполненные критерии приёмки:
 
 1. повторного clean apply документированной командой без ручной коррекции Pod;
 2. `constant`, `ramp` и `burst` прогонов с сохранёнными артефактами;

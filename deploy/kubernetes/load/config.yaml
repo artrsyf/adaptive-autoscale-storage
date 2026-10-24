@@ -13,4 +13,4 @@ duration: "1m0s"
 warmup: "10s"
 request_timeout: "5s"
 output: "/results"
-hold: false
+hold: true

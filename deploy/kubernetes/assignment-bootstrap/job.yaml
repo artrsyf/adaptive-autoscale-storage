@@ -2,10 +2,12 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: assignment-bootstrap
+{{ if not .Release.IsInstall }}
   annotations:
-    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook: post-upgrade
     helm.sh/hook-weight: "10"
     helm.sh/hook-delete-policy: before-hook-creation
+{{ end }}
 spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 600
