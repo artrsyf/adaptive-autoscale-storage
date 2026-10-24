@@ -55,6 +55,18 @@ Control Plane read-only HTTP → SystemState/ScalingDecision DTO
 
 Router публикует `storage_topology_nodes`, `storage_assignment_epoch` и результаты refresh. Control Plane публикует активный epoch, состояние controller loop, качество данных, вычисленные сигналы, thresholds и advisory decision; processing unit — число fenced-запросов и фактически полученные разделы.
 
+### Среды развёртывания и граница Kubernetes
+
+Docker Compose остаётся быстрым regression-стендом. Статический Kubernetes baseline работает в существующем single-node k3s/WSL2, namespace `autoscale-storage`; application Helm chart находится в `deploy/kubernetes/`. Kubernetes layout вертикальный: каталоги `router/`, `control-plane/`, `processing-unit/`, `postgres/`, `prometheus`, `grafana/` и остальных runtime-компонентов содержат workload, Service и component-specific RBAC, по одному resource на source manifest. Общие Helm templates создают ConfigMap из переданных `--set-file` canonical sources и собирают component manifests в release.
+
+Chart принимает только имена внешне подготовленных `storage-credentials` и `router-tls`. Локальный `k3s.ps1` создаёт их до Helm; production secret manager/cert-manager должен обеспечить тот же контракт. Secret payload не хранится в values или Helm release metadata. Checksum конфигурации находится в Pod template annotations и вызывает rollout при изменении переданных файлов.
+
+Во внешнем сетевом контуре единственной application boundary является Router. Traefik Ingress завершает TLS и направляет только точные business paths `/create`, `/get`, `/update`, `/delete` во внутренний `router` Service. `/livez`, `/readyz`, `/metrics`, Control Plane, Processing Units, PostgreSQL, Prometheus и Grafana не входят в публичный контракт. Локальный k3s использует hostname `api.autoscale-storage.localhost` и сгенерированный self-signed Secret `router-tls`; production deployment должен сохранить имя Secret/Ingress contract, но предоставить доверенный сертификат и hostname через environment overlay. Authentication, authorization, tenant isolation и внешние abuse controls пока не реализованы, поэтому текущий endpoint нельзя публиковать в Internet как готовый multi-tenant SaaS.
+
+Processing Unit использует StatefulSet с ordinal 1–3. Pod name через Downward API становится application node ID, а headless DNS — URL опубликованного assignment. Kubernetes replica count описывает только размещение и не является источником topology: Router и PostgreSQL fence используют authoritative assignment epoch.
+
+Приложения не используют Kubernetes API и запускаются без ServiceAccount token. Общий порт `MetricsSource` возвращает доменные `SignalName`, а Prometheus-адаптер получает `PrometheusQuerySet`. `DockerPrometheusQuerySet` сохраняет прежние cAdvisor-запросы Compose, `KubernetesPrometheusQuerySet` читает kubelet/cAdvisor и kube-state-metrics; обе реализации нормализуют инфраструктурную identity в label `node`. Профиль `docker` выбран по умолчанию для обратной совместимости, Kubernetes deployment явно передаёт `--metrics-profile kubernetes`. Domain/service слои не знают о профиле, Pod, Deployment, StatefulSet, namespace или Kubernetes client types.
+
 ## Единая структура и имена
 
 Файлы используют snake_case основного типа, тесты — то же имя с `_test.go`. Например, `DocumentPostgresRepository` находится в `document_postgres_repository.go`. Технические адаптеры принадлежат функциональности, которую обслуживают:

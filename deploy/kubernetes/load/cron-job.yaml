@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: load
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: load
+          annotations:
+            checksum/config: {{ .Values.configs.load | sha256sum | quote }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: application
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: load
+              image: "{{ .Values.images.load.repository }}:{{ .Values.images.load.tag }}"
+              imagePullPolicy: {{ .Values.images.load.pullPolicy }}
+              args: ["--config", "/etc/load/config.yaml"]
+              env:
+                - name: GOMEMLIMIT
+                  value: 280MiB
+                - name: GOMAXPROCS
+                  value: "2"
+              ports:
+                - name: metrics
+                  containerPort: 9091
+              resources:
+                requests: {cpu: 250m, memory: 128Mi}
+                limits: {cpu: "2", memory: 384Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/load
+                  readOnly: true
+                - name: results
+                  mountPath: /results
+          volumes:
+            - name: config
+              configMap:
+                name: load-config
+            - name: results
+              emptyDir: {}

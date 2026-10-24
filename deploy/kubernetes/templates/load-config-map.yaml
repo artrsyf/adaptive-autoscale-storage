@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-config
+data:
+  config.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.load" "value" .Values.configs.load) | indent 4 }}

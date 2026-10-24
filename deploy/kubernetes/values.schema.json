@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["images", "existingSecrets", "router", "storage", "configs"],
+  "properties": {
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controlPlane", "processingUnit", "router", "load", "postgres", "postgresExporter", "kubeStateMetrics", "prometheus", "grafana", "bootstrap"],
+      "properties": {
+        "controlPlane": {"$ref": "#/definitions/image"},
+        "processingUnit": {"$ref": "#/definitions/image"},
+        "router": {"$ref": "#/definitions/image"},
+        "load": {"$ref": "#/definitions/image"},
+        "postgres": {"$ref": "#/definitions/image"},
+        "postgresExporter": {"$ref": "#/definitions/image"},
+        "kubeStateMetrics": {"$ref": "#/definitions/image"},
+        "prometheus": {"$ref": "#/definitions/image"},
+        "grafana": {"$ref": "#/definitions/image"},
+        "bootstrap": {"$ref": "#/definitions/image"}
+      }
+    },
+    "existingSecrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["credentials", "routerTls"],
+      "properties": {
+        "credentials": {"type": "string", "minLength": 1},
+        "routerTls": {"type": "string", "minLength": 1}
+      }
+    },
+    "router": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ingress"],
+      "properties": {
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "className", "host"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "className": {"type": "string", "minLength": 1},
+            "host": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["className", "postgresSize", "prometheusSize"],
+      "properties": {
+        "className": {"type": "string", "minLength": 1},
+        "postgresSize": {"type": "string", "minLength": 1},
+        "prometheusSize": {"type": "string", "minLength": 1}
+      }
+    },
+    "configs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processingUnit", "router", "controlPlane", "load", "prometheus", "postgresExporter", "migrationDocuments", "migrationMonitoring", "migrationAssignment", "grafanaDatasource", "grafanaDashboardProvider", "grafanaStorageDashboard", "grafanaControlPlaneDashboard"],
+      "properties": {
+        "processingUnit": {"type": "string"},
+        "router": {"type": "string"},
+        "controlPlane": {"type": "string"},
+        "load": {"type": "string"},
+        "prometheus": {"type": "string"},
+        "postgresExporter": {"type": "string"},
+        "migrationDocuments": {"type": "string"},
+        "migrationMonitoring": {"type": "string"},
+        "migrationAssignment": {"type": "string"},
+        "grafanaDatasource": {"type": "string"},
+        "grafanaDashboardProvider": {"type": "string"},
+        "grafanaStorageDashboard": {"type": "string"},
+        "grafanaControlPlaneDashboard": {"type": "string"}
+      }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    }
+  }
+}

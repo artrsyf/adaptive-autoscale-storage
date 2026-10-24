@@ -21,7 +21,8 @@ object PrometheusMetricsSourceSpec extends ZIOSpecDefault {
       15.seconds,
       MetricsRetryConfig(2, 250.millis, 1.second)
     ),
-    null.asInstanceOf[Client]
+    null.asInstanceOf[Client],
+    DockerPrometheusQuerySet
   )
 
   override def spec = suite("PrometheusMetricsSource")(
@@ -56,14 +57,25 @@ object PrometheusMetricsSourceSpec extends ZIOSpecDefault {
         )
       }
     },
-    test("defines every signal and preserves zero error series") {
-      val queries = PrometheusQueries.all(Duration.ofSeconds(30))
+    test("Docker queries define every signal and preserve the established resource metric contract") {
+      val queries = DockerPrometheusQuerySet.all(Duration.ofSeconds(30))
       assertTrue(
         queries.keySet == SignalName.values.toSet,
         queries(SignalName.ServerErrorRate).contains("or on(node)"),
         queries(SignalName.OverloadRate).contains("or on(node)"),
-        queries(SignalName.CpuUtilization).contains("container_spec_cpu_quota"),
-        queries(SignalName.MemoryUtilization).contains("container_spec_memory_limit_bytes")
+        queries(SignalName.CpuUtilization).contains("container_label_com_docker_compose_service"),
+        queries(SignalName.MemoryUtilization).contains("container_label_com_docker_compose_service")
+      )
+    },
+    test("Kubernetes queries implement the same signal contract with pod metrics") {
+      val queries = KubernetesPrometheusQuerySet.all(Duration.ofSeconds(30))
+      assertTrue(
+        queries.keySet == SignalName.values.toSet,
+        queries(SignalName.RequestsPerSecond) ==
+          DockerPrometheusQuerySet.all(Duration.ofSeconds(30))(SignalName.RequestsPerSecond),
+        queries(SignalName.CpuUtilization).contains("kube_pod_container_resource_limits"),
+        queries(SignalName.MemoryUtilization).contains("container_memory_working_set_bytes"),
+        queries(SignalName.CpuUtilization).contains("\"node\"")
       )
     }
   )

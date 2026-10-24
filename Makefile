@@ -9,10 +9,11 @@ DISTRIBUTION ?= uniform
 RATE ?= 50
 SECONDS ?= 60
 PARTITIONING_CONFIG ?= config.yaml
+K3S_SCRIPT ?= deploy/kubernetes/k3s.ps1
 
 # Serialize checks and Compose operations even when make is invoked with -j.
 .NOTPARALLEL:
-.PHONY: help build test test-race vet fmt fmt-check check test-all integration smoke smoke-failure up down status logs bench partitioning
+.PHONY: help build test test-race vet fmt fmt-check check test-all integration smoke smoke-failure up down status logs bench partitioning k3s-up k3s-status
 
 help:
 	@echo "make test          - Go tests in four modules and Scala Control Plane tests (no Docker)"
@@ -28,6 +29,8 @@ help:
 	@echo "make bench SCENARIO=constant DISTRIBUTION=hot RATE=50 SECONDS=60"
 	@echo "make bench SCENARIO=controller RATE=150 SECONDS=180 - advisory controller validation"
 	@echo "make partitioning  - Compare partition placement algorithms and write a local report"
+	@echo "make k3s-up        - Build/import images and Helm-upgrade the static k3s baseline"
+	@echo "make k3s-status    - Refresh the scoped context and inspect the k3s namespace"
 
 build:
 	$(GO) -C processing-unit build ./...
@@ -102,3 +105,9 @@ bench:
 
 partitioning:
 	$(GO) -C benchmarks/partitioning run ./cmd/partitioning -config $(PARTITIONING_CONFIG) -output ../../results/partitioning
+
+k3s-up:
+	$(PWSH) -NoProfile -File $(K3S_SCRIPT) -Action Apply
+
+k3s-status:
+	$(PWSH) -NoProfile -File $(K3S_SCRIPT) -Action Status

@@ -1,0 +1,47 @@
+{{- if .Values.router.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: router
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: {{ .Values.router.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.router.ingress.host }}
+      secretName: {{ .Values.existingSecrets.routerTls }}
+  rules:
+    - host: {{ .Values.router.ingress.host }}
+      http:
+        paths:
+          - path: /create
+            pathType: Exact
+            backend:
+              service:
+                name: router
+                port:
+                  name: http
+{{- end }}
+          - path: /get
+            pathType: Exact
+            backend:
+              service:
+                name: router
+                port:
+                  name: http
+          - path: /update
+            pathType: Exact
+            backend:
+              service:
+                name: router
+                port:
+                  name: http
+          - path: /delete
+            pathType: Exact
+            backend:
+              service:
+                name: router
+                port:
+                  name: http

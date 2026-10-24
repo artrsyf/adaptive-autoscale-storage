@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: autoscale-storage-kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: autoscale-storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: autoscale-storage-kube-state-metrics

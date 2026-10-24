@@ -1,6 +1,6 @@
 # Autoscale Distributed Storage
 
-Локальный исследовательский стенд: **Scala Control Plane + Go HTTP Router → Go processing unit → PostgreSQL**, с документным API, управляемым assignment, PostgreSQL-backed fencing и наблюдаемостью. Текущая архитектура: [docs/architecture.md](docs/architecture.md).
+Локальный исследовательский стенд: **Scala Control Plane + Go HTTP Router → Go processing unit → PostgreSQL**, с документным API, управляемым assignment, PostgreSQL-backed fencing и наблюдаемостью. Стенд запускается через Docker Compose или как статический baseline в локальном k3s. Текущая архитектура: [docs/architecture.md](docs/architecture.md).
 
 Полная навигация: [документация проекта](docs/README.md).
 
@@ -50,6 +50,26 @@ docker compose down
 Остановка сохраняет данные PostgreSQL и Prometheus. `down -v` удаляет их. Изменение пароля в `.env` не меняет пароль существующей базы: init-скрипты выполняются только на новом volume. Ротация паролей существующей БД выполняется отдельно.
 
 SQL из `processing-unit/migrations/` применяется при инициализации нового PostgreSQL volume; это пока начальная схема, не универсальный migration runner.
+
+### Статический k3s baseline
+
+Для Kubernetes используется существующий k3s в WSL2, а не отдельный kind-кластер. Требуются рабочий WSL-алиас `k3s-kubectl`, Helm в WSL, Docker Desktop и заполненный `.env`.
+
+```powershell
+make k3s-up
+make k3s-status
+```
+
+Развёртывание выполняется application chart из `deploy/kubernetes/` через `helm upgrade --install` и ограничено namespace `autoscale-storage`. Скрипт создаёт отдельный одноимённый context с короткоживущим namespace-scoped токеном, но не переключает текущий context. Прикладные Pod не имеют Kubernetes API token; cluster-scoped read доступ к kubelet metrics есть только у Prometheus. Внешний application endpoint — `https://api.autoscale-storage.localhost`; TLS завершается на Traefik Ingress, который публикует только четыре документных endpoint Router. Локальный CA не используется: клиенту нужно явно доверять self-signed `results/kubernetes/tls/router.crt`. Windows не резолвит этот поддомен автоматически: для внешнего локального клиента hostname нужно сопоставить с текущим адресом Router Ingress через hosts/DNS либо передать эквивалентное адресное сопоставление клиенту.
+
+Пароли и TLS private key не передаются в Helm values: `k3s.ps1` создаёт `storage-credentials` и `router-tls` до установки release, а chart ссылается на них через `existingSecrets`. Исходные application configs, SQL migrations, exporter queries и dashboards передаются chart командой `--set-file`; их содержимое не дублируется в каталоге deployment.
+
+```bash
+k3s-kubectl --context autoscale-storage get pods
+k3s-kubectl --context autoscale-storage port-forward service/grafana 3000:3000
+```
+
+Подробности identity, assignment bootstrap, доступа и текущей валидации: [Epic 5](docs/epics/epic-5/README.md).
 
 Для volume, созданного до эпика 3, примените новую идемпотентную схему assignment до перезапуска приложений:
 

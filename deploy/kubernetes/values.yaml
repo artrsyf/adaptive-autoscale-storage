@@ -1,0 +1,41 @@
+images:
+  controlPlane: {repository: autoscale-control-plane, tag: local, pullPolicy: Never}
+  processingUnit: {repository: autoscale-processing-unit, tag: local, pullPolicy: Never}
+  router: {repository: autoscale-router, tag: local, pullPolicy: Never}
+  load: {repository: autoscale-load, tag: local, pullPolicy: Never}
+  postgres: {repository: postgres, tag: 17.6-bookworm, pullPolicy: IfNotPresent}
+  postgresExporter: {repository: prometheuscommunity/postgres-exporter, tag: v0.17.1, pullPolicy: IfNotPresent}
+  kubeStateMetrics: {repository: registry.k8s.io/kube-state-metrics/kube-state-metrics, tag: v2.17.0, pullPolicy: IfNotPresent}
+  prometheus: {repository: prom/prometheus, tag: v3.5.0, pullPolicy: IfNotPresent}
+  grafana: {repository: grafana/grafana, tag: 12.1.1, pullPolicy: IfNotPresent}
+  bootstrap: {repository: curlimages/curl, tag: 8.12.1, pullPolicy: IfNotPresent}
+
+existingSecrets:
+  credentials: storage-credentials
+  routerTls: router-tls
+
+router:
+  ingress:
+    enabled: true
+    className: traefik
+    host: api.autoscale-storage.localhost
+
+storage:
+  className: local-path
+  postgresSize: 5Gi
+  prometheusSize: 3Gi
+
+configs:
+  processingUnit: ""
+  router: ""
+  controlPlane: ""
+  load: ""
+  prometheus: ""
+  postgresExporter: ""
+  migrationDocuments: ""
+  migrationMonitoring: ""
+  migrationAssignment: ""
+  grafanaDatasource: ""
+  grafanaDashboardProvider: ""
+  grafanaStorageDashboard: ""
+  grafanaControlPlaneDashboard: ""

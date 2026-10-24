@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+      annotations:
+        checksum/migrations: {{ printf "%s%s%s" .Values.configs.migrationDocuments .Values.configs.migrationMonitoring .Values.configs.migrationAssignment | sha256sum | quote }}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: "{{ .Values.images.postgres.repository }}:{{ .Values.images.postgres.tag }}"
+          imagePullPolicy: {{ .Values.images.postgres.pullPolicy }}
+          args:
+            - -c
+            - shared_preload_libraries=pg_stat_statements
+            - -c
+            - max_connections=80
+            - -c
+            - shared_buffers=128MB
+            - -c
+            - track_io_timing=true
+            - -c
+            - track_wal_io_timing=true
+          env:
+            - name: POSTGRES_USER
+              value: storage
+            - name: POSTGRES_DB
+              value: storage
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.credentials }}
+                  key: POSTGRES_PASSWORD
+            - name: MONITOR_USER
+              value: monitor
+            - name: MONITOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.credentials }}
+                  key: MONITOR_PASSWORD
+          ports:
+            - name: postgres
+              containerPort: 5432
+          startupProbe:
+            exec:
+              command: ["pg_isready", "-U", "storage", "-d", "storage"]
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "storage", "-d", "storage"]
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "storage", "-d", "storage"]
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.storage.className }}
+        resources:
+          requests:
+            storage: {{ .Values.storage.postgresSize }}

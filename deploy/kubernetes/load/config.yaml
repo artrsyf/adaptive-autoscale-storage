@@ -1,0 +1,16 @@
+target: "http://router:8080"
+metrics_port: 9091
+partitions: 128
+scenario: "constant"
+distribution: "uniform"
+rate: 100
+read_percent: 80
+records: 4096
+payload_bytes: 1024
+workers: 128
+seed: 42
+duration: "1m0s"
+warmup: "10s"
+request_timeout: "5s"
+output: "/results"
+hold: false

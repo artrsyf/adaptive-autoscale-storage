@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: processing-unit
+spec:
+  serviceName: processing-unit-headless
+  replicas: 3
+  ordinals:
+    start: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: processing-unit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: processing-unit
+      annotations:
+        checksum/config: {{ .Values.configs.processingUnit | sha256sum | quote }}
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 20
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: processing-unit
+          image: "{{ .Values.images.processingUnit.repository }}:{{ .Values.images.processingUnit.tag }}"
+          imagePullPolicy: {{ .Values.images.processingUnit.pullPolicy }}
+          args: ["--config", "/etc/storage/config.yaml", "--node", "$(POD_NAME)"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecrets.credentials }}
+                  key: POSTGRES_PASSWORD
+            - name: GOMEMLIMIT
+              value: 140MiB
+            - name: GOMAXPROCS
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /livez, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          resources:
+            requests: {cpu: 100m, memory: 96Mi}
+            limits: {cpu: 500m, memory: 192Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/storage
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: processing-unit-config

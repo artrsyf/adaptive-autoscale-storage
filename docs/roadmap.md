@@ -12,7 +12,7 @@
 
 [Эпик 4](epics/epic-4/README.md) завершил наблюдающий Control Plane v1: он использует существующую наблюдаемость B1, строит `SystemState` из Prometheus и выдаёт защищённое от неполных данных и колебаний advisory-решение `ScaleOut / ScaleIn / Maintain / InsufficientData`. Эпик закрывает B3 и подготавливает decision-ядро B5, но не изменяет replicas и assignment.
 
-Следующий самостоятельный инкремент — [эпик 5: Kubernetes static baseline и placement contract](epics/epic-5/README.md), который закрывает инфраструктурный фундамент B2 без HPA и actuator. CPU/HPA baseline из B4 следует вводить только после явного membership/reconciliation contract: replica count сам по себе не обновляет authoritative assignment, а scale-in без draining может удалить текущего владельца partition.
+[Эпик 5: k3s static baseline и placement contract](epics/epic-5/README.md) реализует инфраструктурный фундамент B2 без HPA и actuator: manifests, стабильная identity, assignment bootstrap и Kubernetes-наблюдаемость уже прошли функциональный smoke; длительные нагрузки, restart matrix, visual QA и Compose regression ещё не завершены. CPU/HPA baseline из B4 следует вводить только после явного membership/reconciliation contract: replica count сам по себе не обновляет authoritative assignment, а scale-in без draining может удалить текущего владельца partition.
 
 Номера исходных исследовательских эпиков не задают очередность разработки: наблюдаемость перенесена в текущий эпик, Kafka и кэши — после ранних исследований. Новые рабочие эпики получают собственные границы и критерии проверки в `docs/epics/`.
 

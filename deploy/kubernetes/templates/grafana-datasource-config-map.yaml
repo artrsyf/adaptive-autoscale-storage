@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+data:
+  prometheus.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.grafanaDatasource" "value" .Values.configs.grafanaDatasource) | indent 4 }}

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-exporter-config
+data:
+  queries.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.postgresExporter" "value" .Values.configs.postgresExporter) | indent 4 }}

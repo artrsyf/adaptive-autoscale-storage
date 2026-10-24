@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: router-config
+data:
+  config.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.router" "value" .Values.configs.router) | indent 4 }}

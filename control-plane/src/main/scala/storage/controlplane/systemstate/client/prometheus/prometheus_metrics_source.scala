@@ -13,14 +13,15 @@ import zio.{TaskLayer, URLayer, ZIO, ZLayer}
 
 import scala.concurrent.duration.FiniteDuration
 
-final class PrometheusMetricsSource(config: MetricsConfig, client: Client) extends MetricsSource {
+final class PrometheusMetricsSource(config: MetricsConfig, client: Client, querySet: PrometheusQuerySet)
+    extends MetricsSource {
   override def collect(
       expectedNodes: Set[String],
       observationWindow: Duration,
       evaluatedAt: Instant
   ): ZIO[Any, MetricsSourceError, List[MetricSeries]] =
     ZIO
-      .foreachPar(PrometheusQueries.all(observationWindow).toList) { case (signal, query) =>
+      .foreachPar(querySet.all(observationWindow).toList) { case (signal, query) =>
         execute(signal, query, evaluatedAt)
       }
       .map(_.flatten)
@@ -97,7 +98,8 @@ final class PrometheusMetricsSource(config: MetricsConfig, client: Client) exten
 }
 
 object PrometheusMetricsSource {
-  val layer: URLayer[MetricsConfig & Client, MetricsSource] = ZLayer.derive[PrometheusMetricsSource]
+  val layer: URLayer[MetricsConfig & Client & PrometheusQuerySet, MetricsSource] =
+    ZLayer.derive[PrometheusMetricsSource]
   val module: TaskLayer[MetricsSource] =
-    ZLayer.make[MetricsSource](MetricsConfig.module, Client.default, layer)
+    ZLayer.make[MetricsSource](MetricsConfig.module, Client.default, DockerPrometheusQuerySet.module, layer)
 }

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-plane-config
+data:
+  config.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.controlPlane" "value" .Values.configs.controlPlane) | indent 4 }}

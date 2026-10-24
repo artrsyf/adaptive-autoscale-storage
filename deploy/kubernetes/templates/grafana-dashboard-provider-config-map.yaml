@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+data:
+  default.yml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.grafanaDashboardProvider" "value" .Values.configs.grafanaDashboardProvider) | indent 4 }}

@@ -1,0 +1,8 @@
+router:
+  ingress:
+    enabled: true
+    className: traefik
+    host: api.autoscale-storage.localhost
+
+storage:
+  className: local-path
