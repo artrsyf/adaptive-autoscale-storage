@@ -6,6 +6,7 @@
 |---|---|
 | [Текущая архитектура](architecture.md) | Приложения, слои, зависимости и полный путь запроса с диаграммами и ссылками на код |
 | [Roadmap](roadmap.md) | Каноническая последовательность развития, исследовательские этапы и ближайшая цель |
+| [Continuous Integration](ci.md) | GitHub Actions jobs, toolchain и границы проверок без deployment |
 | [Описание ВКР](vkrm.md) | Теоретическая модель, обоснования и исследовательские вопросы |
 
 ## Документы эпиков
@@ -20,10 +21,10 @@
 - [Эпик 3 — управляемый assignment и fencing](epics/epic-3/README.md): Control Plane snapshot, обновление Router и PostgreSQL-backed запрет stale writes.
 - [Эпик 4 — наблюдающий Control Plane v1](epics/epic-4/README.md): завершённый advisory-инкремент, который агрегирует Prometheus-метрики и выдаёт объяснимые scaling decisions без изменения инфраструктуры; [validation evidence](epics/epic-4/validation.md).
   - [Планируемый change set и продолжение](epics/epic-4/changelog.md): feature-level задачи, тестовые сценарии, порядок реализации и границы следующей сессии.
-- [Эпик 5 — Kubernetes static baseline](epics/epic-5/README.md): следующий инкремент с воспроизводимым kind-стендом, стабильной identity Processing Units и placement contract без автоматического масштабирования.
+- [Эпик 5 — k3s static baseline](epics/epic-5/README.md): принятый Helm baseline с изолированным namespace, стабильной identity Processing Units и placement contract без автоматического масштабирования; clean install, upgrade/rollback, нагрузки, recovery, observability и Compose regression проверены; [валидация](epics/epic-5/validation.md).
 - [Каталог исследовательских эпиков](epics/planned.md): подробные задачи будущих этапов; не перечень завершённых работ.
 
-Актуальная точка продолжения: [рабочая спецификация эпика 5](epics/epic-5/README.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
+Эпик 5 завершён; базовый GitHub CI без deployment описан в [ci.md](ci.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
 
 ## Правила актуализации
 

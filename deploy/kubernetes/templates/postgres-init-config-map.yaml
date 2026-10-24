@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+data:
+  001_documents.sql: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationDocuments" "value" .Values.configs.migrationDocuments) | indent 4 }}
+  002_monitoring.sql: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationMonitoring" "value" .Values.configs.migrationMonitoring) | indent 4 }}
+  003_assignment.sql: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationAssignment" "value" .Values.configs.migrationAssignment) | indent 4 }}

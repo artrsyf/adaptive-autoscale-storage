@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+data:
+  storage.json: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.grafanaStorageDashboard" "value" .Values.configs.grafanaStorageDashboard) | indent 4 }}
+  control-plane.json: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.grafanaControlPlaneDashboard" "value" .Values.configs.grafanaControlPlaneDashboard) | indent 4 }}

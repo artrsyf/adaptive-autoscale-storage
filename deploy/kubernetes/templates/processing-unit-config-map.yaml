@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: processing-unit-config
+data:
+  config.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.processingUnit" "value" .Values.configs.processingUnit) | indent 4 }}

@@ -9,6 +9,7 @@ RUN sbt -batch stage
 FROM eclipse-temurin:21.0.8_9-jre
 RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/universal/stage /opt/control-plane
+RUN chmod 0755 /opt/control-plane/bin/control-plane
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/opt/control-plane/bin/control-plane"]

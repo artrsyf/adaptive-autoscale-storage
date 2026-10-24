@@ -309,6 +309,41 @@
       "targets": [{"refId": "A", "expr": "storage_control_signal_age_seconds", "legendFormat": "{{signal}}"}],
       "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"]}, "tooltip": {"mode": "multi"}},
       "fieldConfig": {"defaults": {"unit": "s", "min": 0, "custom": {"drawStyle": "line", "lineWidth": 1}}, "overrides": []}
+    },
+    {
+      "id": 28,
+      "type": "row",
+      "title": "05 / Kubernetes placement baseline",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 63, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Processing Unit desired / ready / available replicas",
+      "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "kube_statefulset_replicas{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "desired"},
+        {"refId": "B", "expr": "kube_statefulset_status_replicas_ready{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "ready"},
+        {"refId": "C", "expr": "kube_statefulset_status_replicas_available{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "available"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Authoritative nodes and advisory recommendation",
+      "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_current_replicas", "legendFormat": "assignment nodes"},
+        {"refId": "B", "expr": "storage_control_recommended_replicas", "legendFormat": "recommended reference"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "custom": {"drawStyle": "line", "lineWidth": 2}}, "overrides": []}
     }
   ]
 }

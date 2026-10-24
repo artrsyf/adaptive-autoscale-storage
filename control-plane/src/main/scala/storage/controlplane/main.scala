@@ -13,7 +13,12 @@ import storage.controlplane.config.{ApiConfig, ControlPlaneConfig, MetricsConfig
 import storage.controlplane.scaling.domain.ScalingConfig
 import storage.controlplane.scaling.service.ControllerService
 import storage.controlplane.scaling.transport.http.{ScalingDecisionHttpHandler, ScalingDecisionHttpRoutes}
-import storage.controlplane.systemstate.client.prometheus.PrometheusMetricsSource
+import storage.controlplane.systemstate.client.prometheus.{
+  DockerPrometheusQuerySet,
+  KubernetesPrometheusQuerySet,
+  PrometheusMetricsProfile,
+  PrometheusMetricsSource
+}
 import storage.controlplane.systemstate.service.{AssignmentServiceSnapshotSource, StateAggregator}
 import storage.controlplane.systemstate.transport.http.{SystemStateHttpHandler, SystemStateHttpRoutes}
 import zio.http.netty.NettyConfig
@@ -24,8 +29,14 @@ object Main extends ZIOAppDefault {
   override def run: ZIO[ZIOAppArgs & Scope, Any, Any] =
     for {
       arguments <- getArgs
-      configPath <- ZIO.fromEither(parseConfigPath(arguments.toList)).mapError(new IllegalArgumentException(_))
-      config <- ControlPlaneConfig.load(configPath)
+      applicationArguments <- ZIO
+        .fromEither(parseArguments(arguments.toList))
+        .mapError(new IllegalArgumentException(_))
+      config <- ControlPlaneConfig.load(applicationArguments.configPath)
+      prometheusQuerySetLayer = applicationArguments.metricsProfile match {
+        case PrometheusMetricsProfile.Docker     => DockerPrometheusQuerySet.layer
+        case PrometheusMetricsProfile.Kubernetes => KubernetesPrometheusQuerySet.layer
+      }
       serverConfig = Server.Config.default
         .binding(config.server.listenHost, config.server.port)
         .idleTimeout(java.time.Duration.ofMillis(config.server.idleTimeout.toMillis))
@@ -43,6 +54,7 @@ object Main extends ZIOAppDefault {
         AssignmentService.layer,
         AssignmentServiceSnapshotSource.layer,
         Client.default,
+        prometheusQuerySetLayer,
         PrometheusMetricsSource.layer,
         StateAggregator.layer,
         ControllerService.layer,
@@ -77,9 +89,32 @@ object Main extends ZIOAppDefault {
       _ <- Server.serve(domainRoutes ++ operationalRoutes.routes)
     } yield ()
 
-  private def parseConfigPath(arguments: List[String]): Either[String, String] = arguments match {
-    case Nil                       => Right("config.yaml")
-    case "--config" :: path :: Nil => Right(path)
-    case _                         => Left("usage: control-plane [--config path]")
+  private final case class ApplicationArguments(
+      configPath: String,
+      metricsProfile: PrometheusMetricsProfile
+  )
+
+  private def parseArguments(arguments: List[String]): Either[String, ApplicationArguments] = {
+    def loop(
+        remaining: List[String],
+        configPath: Option[String],
+        metricsProfile: Option[PrometheusMetricsProfile]
+    ): Either[String, ApplicationArguments] = remaining match {
+      case Nil =>
+        Right(
+          ApplicationArguments(
+            configPath.getOrElse("config.yaml"),
+            metricsProfile.getOrElse(PrometheusMetricsProfile.Docker)
+          )
+        )
+      case "--config" :: path :: tail if configPath.isEmpty =>
+        loop(tail, Some(path), metricsProfile)
+      case "--metrics-profile" :: value :: tail if metricsProfile.isEmpty =>
+        PrometheusMetricsProfile.parse(value).flatMap(profile => loop(tail, configPath, Some(profile)))
+      case _ =>
+        Left("usage: control-plane [--config path] [--metrics-profile docker|kubernetes]")
+    }
+
+    loop(arguments, None, None)
   }
 }

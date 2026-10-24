@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: processing-unit-headless
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: processing-unit
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

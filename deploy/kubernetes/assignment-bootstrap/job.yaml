@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: assignment-bootstrap
+{{ if not .Release.IsInstall }}
+  annotations:
+    helm.sh/hook: post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+{{ end }}
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: assignment-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 102
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: "{{ .Values.images.bootstrap.repository }}:{{ .Values.images.bootstrap.tag }}"
+          imagePullPolicy: {{ .Values.images.bootstrap.pullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until current="$(curl --fail --silent --show-error http://control-plane:8080/assignments/current)"; do
+                sleep 2
+              done
+              current_epoch="$(printf '%s' "$current" | sed -n 's/.*"epoch":\([0-9][0-9]*\).*/\1/p')"
+              if [ -z "$current_epoch" ]; then
+                echo "current assignment has no epoch" >&2
+                exit 1
+              fi
+              if [ "$current_epoch" -gt 1 ]; then
+                echo "assignment bootstrap already completed at epoch $current_epoch"
+                exit 0
+              fi
+              assignments=""
+              partition=0
+              while [ "$partition" -lt 128 ]; do
+                node=$((partition % 3 + 1))
+                if [ -n "$assignments" ]; then assignments="$assignments,"; fi
+                assignments="$assignments{\"partition\":$partition,\"node_id\":\"processing-unit-$node\"}"
+                partition=$((partition + 1))
+              done
+              payload="{\"expected_epoch\":1,\"assignment\":{\"epoch\":2,\"partition_count\":128,\"nodes\":[{\"id\":\"processing-unit-1\",\"url\":\"http://processing-unit-1.processing-unit-headless:8080\"},{\"id\":\"processing-unit-2\",\"url\":\"http://processing-unit-2.processing-unit-headless:8080\"},{\"id\":\"processing-unit-3\",\"url\":\"http://processing-unit-3.processing-unit-headless:8080\"}],\"assignments\":[$assignments]}}"
+              curl --fail --silent --show-error \
+                --request PUT \
+                --header 'Content-Type: application/json' \
+                --data "$payload" \
+                http://control-plane:8080/assignments/current
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

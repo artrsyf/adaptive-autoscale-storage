@@ -1,106 +1,111 @@
-# Эпик 5 — Kubernetes static baseline и placement contract
+# Эпик 5 — k3s static baseline и placement contract
 
-## Цель
+## Цель и фактическая среда
 
-Перенести существующий стенд в локальный Kubernetes и получить воспроизводимую статическую baseline-конфигурацию для будущего сравнения способов масштабирования. Эпик проверяет развёртывание, стабильную идентичность Processing Unit, согласованность assignment и наблюдаемость в Kubernetes, но намеренно не исполняет advisory-решения Control Plane.
+Эпик переносит существующий стенд в уже установленный локальный single-node k3s под WSL2 и создаёт статическую baseline-конфигурацию для будущего сравнения способов масштабирования. Отдельный kind-кластер не создаётся: он дублировал бы работающий container runtime и не добавлял бы исследовательской ценности.
 
-Эпик продолжает завершённый [наблюдающий Control Plane v1](../epic-4/README.md) и закрывает Kubernetes-фундамент B2. CPU/HPA baseline, multi-metric actuator и автоматическая перестройка assignment остаются отдельными последующими инкрементами: до них необходимо определить жизненный цикл membership и безопасный scale-in.
+Эпик продолжает завершённый [наблюдающий Control Plane v1](../epic-4/README.md) и закрывает инфраструктурный фундамент B2. HPA, multi-metric actuator, автоматическая перестройка assignment, draining и безопасный scale-in остаются последующими инкрементами.
 
-## Целевой поток
+## Реализованный поток
 
 ```text
-kind cluster
+локальный k3s / WSL2
+    ↓ namespace autoscale-storage + scoped operator context
+Helm application chart + локальные application images в containerd k3s
     ↓
-статические Kubernetes workload и service contracts
+PostgreSQL StatefulSet + Control Plane
+    ↓ HTTP bootstrap assignment epoch 2
+processing-unit-1..3 StatefulSet + headless DNS
     ↓
-стабильные Processing Unit identities
+external client → TLS Ingress → Router → Processing Units → PostgreSQL fence
     ↓
-bootstrap authoritative assignment
-    ↓
-Router + Processing Units + PostgreSQL
-    ↓
-Prometheus → Control Plane → advisory decision
-    ↓
-Grafana overview и validation evidence
+kubelet/cAdvisor + kube-state-metrics → KubernetesPrometheusQuerySet
+Docker cAdvisor                    → DockerPrometheusQuerySet
+                                      ↓
+                       MetricsSource / SignalName → advisory policy → Grafana
 ```
 
-## Scope
+## Граница Kubernetes
 
-### 5.1. Воспроизводимый локальный кластер
+Kubernetes API не является зависимостью бизнес-кода. Router, Processing Unit, Control Plane, PostgreSQL exporter, Grafana и bootstrap Job используют ServiceAccount без API-токена. Они видят только DNS, HTTP-контракты, PostgreSQL и Prometheus.
 
-- использовать `kind` с закреплённой версией node image;
-- добавить одну документированную команду подготовки свежего кластера, загрузки локальных application images и применения manifests;
-- хранить Kubernetes-конфигурацию как native manifests с Kustomize, без генерации инфраструктурной схемы из Go или Scala;
-- добавить namespace, ConfigMap, шаблон Secret без реальных credentials, ServiceAccount и только минимально необходимый RBAC;
-- сохранить Docker Compose как быстрый локальный и regression-стенд.
+Внешнее приложение входит через `https://api.autoscale-storage.localhost` → Traefik Ingress → внутренний Router Service. Ingress завершает TLS и публикует только `/create`, `/get`, `/update`, `/delete`; operational endpoints и все остальные компоненты остаются cluster-internal. Локальный `router-tls` создаётся скриптом как self-signed сертификат, а production-среда должна предоставить Secret с тем же контрактом от доверенного issuer и собственный hostname overlay. Это формирует SaaS-compatible network boundary, но не объявляет ещё не реализованные authentication, authorization и tenant isolation.
 
-### 5.2. Статическое размещение компонентов
+Prometheus — единственный runtime-компонент с cluster-scoped доступом: ему разрешено только читать node metadata и kubelet proxy endpoints для cAdvisor. Доступ kube-state-metrics ограничен Role в `autoscale-storage`. Локальный context `autoscale-storage` получает короткоживущий токен namespace-scoped ServiceAccount и не читает cluster nodes.
 
-- развернуть PostgreSQL с persistent volume, Control Plane, Router, Processing Units, Prometheus, Grafana и отдельный load-generator Job;
-- задать readiness/liveness/startup probes по фактическим operational endpoints;
-- настроить graceful termination и достаточный termination grace period;
-- откалибровать requests/limits экспериментально, отдельно проверив headroom Prometheus, Grafana и генератора нагрузки;
-- оставить число Processing Units статическим на всём протяжении эпика.
+Control Plane использует общий `PrometheusQuerySet`, который обязан предоставить запрос для каждого доменного `SignalName`. Compose сохраняет прежние cAdvisor PromQL и остаётся профилем по умолчанию; Kubernetes deployment явно выбирает `--metrics-profile kubernetes`. Обе реализации преобразуют environment-specific labels в общий `node`, поэтому `MetricsSource`, агрегатор и policy не ветвятся по среде. Kubernetes DTO, Pod, StatefulSet и Deployment не представлены в domain/service слоях.
 
-### 5.3. Identity и assignment contract
+## Placement и identity contract
 
-- обеспечить стабильные адресуемые идентичности Processing Units, предпочтительно через StatefulSet и headless Service;
-- создавать начальный authoritative assignment явным bootstrap Job или вызовом Assignment API, а не SQL-миграцией;
-- подтвердить, что Router получает тот же epoch/node set, а Processing Unit продолжает атомарно проверять ownership и epoch вместе с SQL-операцией;
-- не считать Kubernetes replica count источником истины для assignment;
-- описать контракт между Kubernetes pod identity, application node ID, service discovery name и assignment node ID.
+| Понятие | Значение |
+|---|---|
+| Kubernetes workload | StatefulSet `processing-unit`, три статические replica |
+| Pod identity | `processing-unit-1`, `processing-unit-2`, `processing-unit-3`; `.spec.ordinals.start: 1` |
+| Application node ID | точное имя Pod из Downward API, переданное через `--node` |
+| Service discovery | `<pod>.processing-unit-headless:8080` |
+| Assignment node ID | совпадает с application node ID |
+| Источник истины | опубликованный assignment snapshot в PostgreSQL, не replica count Kubernetes |
 
-### 5.4. Kubernetes-наблюдаемость
+Миграция создаёт исходный Compose-совместимый epoch 1. Идемпотентный bootstrap Job вызывает Assignment HTTP API и публикует epoch 2 с адресами StatefulSet. При initial install это обычный Helm resource, который запускается параллельно с workload и разрывает зависимость готовности Router от assignment; при upgrade тот же шаблон становится `post-upgrade` hook. При epoch больше 1 Job не меняет topology. Это промежуточное ограничение существующего API: пустое assignment-состояние пока не поддерживается.
 
-- собирать CPU и память Processing Units из Kubernetes/cAdvisor-метрик;
-- нормализовать Compose- и Kubernetes-сигналы до одинаковых канонических per-node series, предпочтительно Prometheus recording rules;
-- не менять доменную policy Control Plane в зависимости от среды развёртывания;
-- сохранить семантику missing/stale metrics: отсутствие данных не отображается как ноль и запрещает scaling decision;
-- расширить обзорный Grafana dashboard показателями desired/ready/available replicas, числом нод authoritative assignment и advisory recommended replicas.
+## Состав поставки
 
-### 5.5. Проверка baseline
+- [`deploy/kubernetes/Chart.yaml`](../../../deploy/kubernetes/Chart.yaml) определяет единый application chart; вертикальные каталоги по runtime-компонентам содержат workload/Service/RBAC по одному resource на файл, а общие templates создают ConfigMap. Карта chart находится в [`deploy/kubernetes/README.md`](../../../deploy/kubernetes/README.md);
+- `deploy/kubernetes/k3s.ps1` проверяет `.env`, собирает четыре локальных image, импортирует их в containerd k3s, применяет credential Secret, создаёт/переиспользует локальный TLS Secret для Router Ingress, выполняет atomic `helm upgrade --install`, удаляет точно распознанные артефакты прежнего Kustomize deployment, обновляет scoped context и ждёт rollout; private key хранится только под игнорируемым `results/`;
+- application configs, migrations, exporter queries и dashboards поступают из канонических файлов через `--set-file`; Helm values хранят только имена существующих Secrets, images, Ingress и storage settings;
+- PostgreSQL и Prometheus используют PVC `local-path`; Processing Units используют StatefulSet; остальные runtime-компоненты — Deployment;
+- startup/readiness/liveness probes используют фактические operational endpoints;
+- CronJob `load` хранится с `suspend: true` и служит шаблоном для отдельных load Jobs; после прогона генератор остаётся запущенным, чтобы результаты можно было скопировать до явного удаления Job;
+- Grafana показывает Kubernetes desired/ready/available replicas рядом с authoritative node count и advisory recommendation;
+- Docker Compose остаётся быстрым regression-стендом; запуск без `--metrics-profile` использует прежние Docker cAdvisor-запросы, поэтому существующий способ запуска совместим.
 
-- прогнать `constant`, `ramp` и `burst` workload через Router;
-- подтвердить CRUD, CAS assignment, Router refresh и PostgreSQL fencing;
-- проверить рестарт Router, одной Processing Unit, Control Plane, Prometheus и PostgreSQL в пределах заявленной модели восстановления;
-- зафиксировать фактические requests/limits, окна наблюдения, нагрузку, состояние pod и скриншоты dashboard;
-- выполнить Compose regression после Kubernetes-проверок.
+## Команды
 
-## Критерии приёмки
+WSL2 и локальный k3s должны быть запущены. Kubernetes-команды выполняются WSL-алиасом `k3s-kubectl`; Helm должен быть установлен внутри WSL и использует kubeconfig из этого alias без переключения текущего context.
 
-Эпик готов, когда:
+```powershell
+make k3s-up
+make k3s-status
+```
 
-1. Новый локальный `kind` cluster поднимается из документированной команды без ручного редактирования manifests.
-2. Все application images загружены локально, а workload переходят в Ready с настроенными probes.
-3. Работают три статические Processing Units со стабильными node IDs и адресами.
-4. Authoritative assignment содержит ровно эти ноды и согласован с Router snapshot; stale epoch/owner по-прежнему отклоняется Processing Unit.
-5. Control Plane строит полный `SystemState`, включая Kubernetes CPU/RAM, и остаётся только advisory.
-6. Grafana показывает deployment state, assignment node count, recommended replica reference и policy thresholds без подмены missing data нулём.
-7. `constant`, `ramp` и `burst`, а также выбранные restart/failure сценарии подтверждены фактическими артефактами.
-8. Контейнерные и Compose regression-проверки текущих API проходят после изменений.
-9. Validation report отделяет выполненные проверки от ограничений и будущего CPU/HPA эксперимента.
+Скрипт не меняет текущий context `default`; он создаёт/обновляет отдельный context `autoscale-storage`. Для прямой проверки:
+
+```bash
+k3s-kubectl --context autoscale-storage get pods
+k3s-kubectl --context autoscale-storage port-forward service/grafana 3000:3000
+```
+
+Одноразовый нагрузочный Job создаётся из suspend CronJob с уникальным именем. После записи итогового `summary.json` генератор продолжает отдавать метрики и оставляет Pod в состоянии Running. Результаты нужно скопировать из контейнера `load` до явного удаления Job; они не считаются принятыми автоматически.
+
+```bash
+k3s-kubectl --context autoscale-storage create job --from=cronjob/load load-constant
+load_pod=$(k3s-kubectl --context autoscale-storage get pod -l job-name=load-constant -o jsonpath='{.items[0].metadata.name}')
+k3s-kubectl --context autoscale-storage cp "${load_pod}:/results" ./results/kubernetes/load-constant -c load
+k3s-kubectl --context autoscale-storage delete job load-constant
+```
+
+Scoped operator получает `pods/exec` только для обслуживающих операций внутри namespace; это требуется механизму `kubectl cp`. Runtime ServiceAccount приложений по-прежнему не имеет API token и не получает этот доступ.
+
+## Статус и критерии приёмки
+
+На 24.10.2026 эпик принят полностью. Chart проходит initial install на пустом namespace/PVC и повторный upgrade без ручной коррекции Pod; rollback, TLS Ingress, внешний CRUD, `constant`/`ramp`/`burst`, полная restart matrix, visual QA и Compose regression пройдены. Kubernetes Prometheus profile возвращает CPU/RAM для трёх Processing Unit, активный assignment сохраняет epoch 2 и 128 partitions. Фактические доказательства и ограничения перечислены в [validation.md](validation.md), состав изменений — в [changelog.md](changelog.md).
+
+Выполненные критерии приёмки:
+
+1. повторного clean apply документированной командой без ручной коррекции Pod;
+2. `constant`, `ramp` и `burst` прогонов с сохранёнными артефактами;
+3. проверки рестартов Router, одной Processing Unit, Control Plane, Prometheus и PostgreSQL;
+4. визуальной проверки новых Grafana-панелей;
+5. Compose regression (`make test-all`) после Kubernetes-изменений;
+6. экспериментальной калибровки requests/limits и проверки headroom генератора и мониторинга.
 
 ## Вне scope
 
-В этом эпике не реализуются:
-
 - HPA и любое автоматическое изменение replica count;
 - Kubernetes API client или actuator внутри Control Plane;
-- автоматическое обнаружение topology и публикация assignment;
-- allocator на Scala, rebalancing, draining и физическая миграция данных;
+- автоматическое обнаружение membership и публикация assignment;
+- allocator, rebalancing, draining и физическая миграция данных;
 - безопасный динамический scale-in;
-- Kubernetes Operator, Kafka, Redis и полноформатный сравнительный benchmark B6.
+- Kubernetes Operator, Kafka, Redis и полный сравнительный benchmark B6.
 
-`ScalingDecision.recommendedReplicas` остаётся наблюдаемым reference value: оно показывает, какой размер пула предлагает policy при текущем состоянии, но не является desired state Kubernetes и ничего не меняет.
-
-## Рекомендуемое продолжение
-
-После статического baseline отдельным эпиком определить membership/reconciliation contract и только затем сравнить CPU/HPA baseline с исполняемой multi-metric policy. Для scale-out требуется ввод готовой ноды в assignment; для scale-in — выбор удаляемой ноды, draining и атомарная публикация нового epoch. Простое связывание текущего reference value с replicas нарушило бы уже реализованные ownership-инварианты.
-
-## Старт следующей агентской сессии
-
-1. Создать ветку `epic/5-kubernetes-baseline` от принятого состояния Epic 4.
-2. Проверить локальные версии Docker, `kind` и `kubectl`, не перезапуская WSL или Docker Engine.
-3. Сначала зафиксировать placement/identity contract и структуру manifests, затем добавлять workload.
-4. Сохранять промежуточные решения в этом документе и `AGENTS.md`, если появляется устойчивое правило для всего репозитория.
-5. Создать `changelog.md` и `validation.md` по мере реализации; результаты и скриншоты считать принятыми только после фактического прогона.
+`ScalingDecision.recommendedReplicas` остаётся наблюдаемым reference value и не является desired state Kubernetes.

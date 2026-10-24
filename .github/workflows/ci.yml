@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go / ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - processing-unit
+          - router
+          - benchmarks/load
+          - benchmarks/partitioning
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: 1.25.7
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+
+      - name: Check formatting
+        working-directory: ${{ matrix.module }}
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+
+      - name: Build
+        working-directory: ${{ matrix.module }}
+        run: go build ./...
+
+      - name: Vet
+        working-directory: ${{ matrix.module }}
+        run: go vet ./...
+
+      - name: Test
+        working-directory: ${{ matrix.module }}
+        run: go test ./...
+
+  scala:
+    name: Scala Control Plane
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JAVA_OPTS: -Xms512M -Xmx2G -Xss4M -Dfile.encoding=UTF-8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+          cache-dependency-path: |
+            control-plane/build.sbt
+            control-plane/project/build.properties
+            control-plane/project/plugins.sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Check formatting, compile and test
+        working-directory: control-plane
+        run: sbt -batch scalafmtCheckAll compile test
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v3.21.0
+
+      - name: Lint and render install and upgrade
+        shell: bash
+        run: |
+          chart=deploy/kubernetes
+          chart_inputs=(
+            --values "$chart/values-k3s.yaml"
+            --set-file configs.processingUnit=processing-unit/config.yaml
+            --set-file configs.router=router/config.yaml
+            --set-file configs.controlPlane=control-plane/config.yaml
+            --set-file configs.load="$chart/load/config.yaml"
+            --set-file configs.prometheus="$chart/prometheus/config.yaml"
+            --set-file configs.postgresExporter=deploy/postgres-exporter/queries.yaml
+            --set-file configs.migrationDocuments=processing-unit/migrations/001_documents.sql
+            --set-file configs.migrationMonitoring=processing-unit/migrations/002_monitoring.sql
+            --set-file configs.migrationAssignment=processing-unit/migrations/003_assignment.sql
+            --set-file configs.grafanaDatasource=deploy/grafana/provisioning/datasources/prometheus.yaml
+            --set-file configs.grafanaDashboardProvider=deploy/grafana/provisioning/dashboards/default.yml
+            --set-file configs.grafanaStorageDashboard=deploy/grafana/dashboards/storage.json
+            --set-file configs.grafanaControlPlaneDashboard=deploy/grafana/dashboards/control-plane.json
+          )
+          helm lint "$chart" "${chart_inputs[@]}"
+          helm template autoscale-storage "$chart" "${chart_inputs[@]}" > "$RUNNER_TEMP/install.yaml"
+          helm template autoscale-storage "$chart" --is-upgrade "${chart_inputs[@]}" > "$RUNNER_TEMP/upgrade.yaml"

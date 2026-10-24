@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autoscale-storage-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: autoscale-storage
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autoscale-storage-prometheus

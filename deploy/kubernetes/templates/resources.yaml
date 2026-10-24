@@ -1,0 +1,7 @@
+{{- $root := . -}}
+{{- range $path, $_ := .Files.Glob "*/*.yaml" -}}
+{{- if and (not (hasSuffix "kustomization.yaml" $path)) (not (hasSuffix "config.yaml" $path)) (not (hasPrefix "foundation/" $path)) -}}
+---
+{{ tpl ($root.Files.Get $path) $root }}
+{{- end -}}
+{{- end -}}

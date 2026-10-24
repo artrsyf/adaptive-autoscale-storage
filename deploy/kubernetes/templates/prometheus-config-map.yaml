@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yaml: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.prometheus" "value" .Values.configs.prometheus) | indent 4 }}
