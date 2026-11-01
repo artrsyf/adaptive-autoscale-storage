@@ -39,11 +39,22 @@ scrape_configs:
     static_configs:
       - targets: ["control-plane:8080"]
   - job_name: processing-unit
-    static_configs:
-      - targets:
-          - processing-unit-1.processing-unit-headless:8080
-          - processing-unit-2.processing-unit-headless:8080
-          - processing-unit-3.processing-unit-headless:8080
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ["autoscale-storage"]
+    relabel_configs:
+      - action: keep
+        source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        regex: processing-unit
+      - action: keep
+        source_labels: [__meta_kubernetes_pod_phase]
+        regex: Running
+      - action: replace
+        source_labels: [__meta_kubernetes_pod_ip]
+        regex: (.+)
+        replacement: ${1}:8080
+        target_label: __address__
   - job_name: load
     kubernetes_sd_configs:
       - role: pod

@@ -83,3 +83,20 @@ func (assignmentService *DynamicAssignmentService) Epoch() uint64 {
 	}
 	return 0
 }
+
+func (assignmentService *DynamicAssignmentService) Snapshot() (assignment.AssignmentSnapshot, error) {
+	snapshot := assignmentService.snapshot.Load()
+	if snapshot == nil {
+		return assignment.AssignmentSnapshot{}, fmt.Errorf("assignment snapshot unavailable")
+	}
+	assignments := make([]assignment.PartitionOwner, len(snapshot.owners))
+	for partition, owner := range snapshot.owners {
+		assignments[partition] = assignment.PartitionOwner{Partition: partition, NodeID: owner.ID}
+	}
+	return assignment.AssignmentSnapshot{
+		Epoch:          snapshot.epoch,
+		PartitionCount: snapshot.partitionCount,
+		Nodes:          append([]assignment.AssignmentNode(nil), snapshot.nodes...),
+		Assignments:    assignments,
+	}, nil
+}

@@ -83,6 +83,26 @@ object ControllerServiceSpec extends ZIOSpecDefault {
         observedMaximum <- maximumActive.get
         observedCalls <- calls.get
       } yield assertTrue(observedMaximum == 1, observedCalls >= 2)
+    },
+    test("continues polling after an unexpected cycle defect") {
+      for {
+        calls <- Ref.make(0)
+        collector = new SystemStateCollector {
+          override def collectOnce(evaluatedAt: Instant) =
+            calls.updateAndGet(_ + 1).flatMap { callCount =>
+              if (callCount == 1) ZIO.die(new RuntimeException("unexpected collector defect"))
+              else ZIO.succeed(state(complete = true))
+            }
+        }
+        snapshotRef <- Ref.make(ControllerSnapshot.collecting)
+        controller = ControllerService(collector, scalingConfig, metricsConfig, snapshotRef)
+        fiber <- controller.run.fork
+        _ <- TestClock.adjust(zio.Duration.fromSeconds(15))
+        _ <- ZIO.yieldNow
+        _ <- fiber.interrupt
+        observedCalls <- calls.get
+        snapshot <- controller.snapshot
+      } yield assertTrue(observedCalls >= 2, snapshot.failedCycles >= 1, snapshot.completeCycles >= 1)
     }
   )
 

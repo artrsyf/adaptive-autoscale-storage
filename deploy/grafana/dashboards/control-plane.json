@@ -1,10 +1,10 @@
 {
   "uid": "control-plane-overview",
   "title": "Control Plane / System Overview",
-  "tags": ["storage", "control-plane", "advisory"],
+  "tags": ["storage", "control-plane", "autoscaling"],
   "timezone": "browser",
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": {"from": "now-15m", "to": "now"},
   "templating": {"list": []},
@@ -24,7 +24,7 @@
       "gridPos": {"x": 0, "y": 1, "w": 24, "h": 3},
       "options": {
         "mode": "markdown",
-        "content": "This dashboard visualizes the **exact aggregates evaluated by Control Plane**, not an independent Grafana policy. `ScaleOut` and `ScaleIn` are advisory only. Signal pressure is `evaluated value / upper threshold`; **1.0** reaches the scale-out boundary. Missing telemetry stays **No data** and changes the decision to `InsufficientData`."
+        "content": "This dashboard visualizes the **exact aggregates evaluated by Control Plane**, not an independent Grafana policy. In Kubernetes mode, confirmed `ScaleOut` and `ScaleIn` decisions start a persisted reconciliation operation; the reconciliation section shows its direction, phase, result and requested versus actual capacity. Signal pressure is `evaluated value / upper threshold`; **1.0** reaches the scale-out boundary. Missing telemetry stays **No data** and changes the decision to `InsufficientData`."
       }
     },
     {
@@ -313,16 +313,73 @@
     {
       "id": 28,
       "type": "row",
-      "title": "05 / Kubernetes placement baseline",
+      "title": "05 / Automated reconciliation",
       "collapsed": false,
       "gridPos": {"x": 0, "y": 63, "w": 24, "h": 1},
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "state-timeline",
+      "title": "Reconciliation direction",
+      "gridPos": {"x": 0, "y": 64, "w": 6, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_reconciliation_direction == 1", "legendFormat": "scale-{{direction}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 32,
+      "type": "state-timeline",
+      "title": "Reconciliation phase",
+      "gridPos": {"x": 6, "y": 64, "w": 10, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_reconciliation_phase == 1", "legendFormat": "{{phase}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 33,
+      "type": "state-timeline",
+      "title": "Reconciliation result",
+      "gridPos": {"x": 16, "y": 64, "w": 8, "h": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"refId": "A", "expr": "storage_control_reconciliation_status == 1", "legendFormat": "{{status}}"}],
+      "options": {"mergeValues": true, "showValue": "never", "rowHeight": 0.8},
+      "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80}}, "overrides": []}
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "Requested and actual Processing Unit capacity",
+      "gridPos": {"x": 0, "y": 70, "w": 24, "h": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "storage_control_reconciliation_source_replicas", "legendFormat": "operation source"},
+        {"refId": "B", "expr": "storage_control_reconciliation_target_replicas", "legendFormat": "operation target"},
+        {"refId": "C", "expr": "kube_statefulset_replicas{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "desired Pods"},
+        {"refId": "D", "expr": "kube_statefulset_status_replicas_ready{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "ready Pods"},
+        {"refId": "E", "expr": "storage_control_current_replicas", "legendFormat": "assignment nodes"},
+        {"refId": "F", "expr": "storage_control_fleet_desired_replicas", "legendFormat": "fleet desired"},
+        {"refId": "G", "expr": "storage_control_fleet_ready_replicas", "legendFormat": "fleet ready"},
+        {"refId": "H", "expr": "storage_control_assignment_fleet_drift", "legendFormat": "assignment/fleet drift"}
+      ],
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"]}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"decimals": 0, "min": 0, "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "lineWidth": 2}}, "overrides": []}
+    },
+    {
+      "id": 35,
+      "type": "row",
+      "title": "06 / Kubernetes placement baseline",
+      "collapsed": false,
+      "gridPos": {"x": 0, "y": 78, "w": 24, "h": 1},
       "panels": []
     },
     {
       "id": 29,
       "type": "timeseries",
       "title": "Processing Unit desired / ready / available replicas",
-      "gridPos": {"x": 0, "y": 64, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 79, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "targets": [
         {"refId": "A", "expr": "kube_statefulset_replicas{namespace=\"autoscale-storage\",statefulset=\"processing-unit\"}", "legendFormat": "desired"},
@@ -336,7 +393,7 @@
       "id": 30,
       "type": "timeseries",
       "title": "Authoritative nodes and advisory recommendation",
-      "gridPos": {"x": 12, "y": 64, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 79, "w": 12, "h": 8},
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "targets": [
         {"refId": "A", "expr": "storage_control_current_replicas", "legendFormat": "assignment nodes"},

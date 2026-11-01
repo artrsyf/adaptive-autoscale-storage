@@ -1,5 +1,6 @@
 package storage.controlplane.config
 
+import storage.controlplane.reconciliation.domain.ActuationMode
 import zio.test._
 
 object ControlPlaneConfigSpec extends ZIOSpecDefault {
@@ -13,6 +14,8 @@ object ControlPlaneConfigSpec extends ZIOSpecDefault {
           config.metrics.pollInterval.toSeconds == 5,
           config.scaling.confirmationWindows == 3,
           config.scaling.thresholds.size == 9,
+          config.actuation.mode == ActuationMode.Advisory,
+          config.actuation.workloadName == "processing-unit",
           config.validate.isRight
         )
       }

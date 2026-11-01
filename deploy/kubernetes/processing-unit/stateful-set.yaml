@@ -2,9 +2,10 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: processing-unit
+{{- $existingProcessingUnit := lookup "apps/v1" "StatefulSet" .Release.Namespace "processing-unit" }}
 spec:
   serviceName: processing-unit-headless
-  replicas: 3
+  replicas: {{ dig "spec" "replicas" .Values.processingUnit.initialReplicas $existingProcessingUnit }}
   ordinals:
     start: 1
   podManagementPolicy: Parallel

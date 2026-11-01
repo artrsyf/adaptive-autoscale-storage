@@ -117,6 +117,7 @@ jobs:
             --set-file configs.migrationDocuments=processing-unit/migrations/001_documents.sql
             --set-file configs.migrationMonitoring=processing-unit/migrations/002_monitoring.sql
             --set-file configs.migrationAssignment=processing-unit/migrations/003_assignment.sql
+            --set-file configs.migrationScalingOperations=processing-unit/migrations/004_scaling_operations.sql
             --set-file configs.grafanaDatasource=deploy/grafana/provisioning/datasources/prometheus.yaml
             --set-file configs.grafanaDashboardProvider=deploy/grafana/provisioning/dashboards/default.yml
             --set-file configs.grafanaStorageDashboard=deploy/grafana/dashboards/storage.json
