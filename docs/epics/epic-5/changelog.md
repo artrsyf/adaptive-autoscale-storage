@@ -26,7 +26,9 @@
 
 ## Продолжение
 
-1. Оставить deployment вне CI до появления удалённого окружения и явного контракта credentials/registry.
-2. Не переносить локальные baseline limits в production без отдельного sizing на целевой multi-node среде.
+1. Следующий рабочий scope — [эпик 6](../epic-6/README.md): безопасное Kubernetes actuation, membership и reconciliation между StatefulSet, assignment и Router topology.
+2. Сохранить StatefulSet в эпике 6; решение о переходе Processing Unit на Deployment принимать в D6 `Failure Recovery` после partition state machine и graceful draining.
+3. Оставить автоматическое развёртывание окружения вне CI до появления удалённого окружения и явного контракта credentials/registry.
+4. Не переносить локальные baseline limits в production без отдельного sizing на целевой multi-node среде.
 
 Change set зафиксирован в ветке `epic/5-kubernetes-baseline`; merge в `master` не выполнялся.

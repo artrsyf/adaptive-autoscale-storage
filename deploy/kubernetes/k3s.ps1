@@ -275,6 +275,7 @@ $configFiles = [ordered]@{
     'configs.migrationDocuments' = (Join-Path $repositoryRoot 'processing-unit/migrations/001_documents.sql')
     'configs.migrationMonitoring' = (Join-Path $repositoryRoot 'processing-unit/migrations/002_monitoring.sql')
     'configs.migrationAssignment' = (Join-Path $repositoryRoot 'processing-unit/migrations/003_assignment.sql')
+    'configs.migrationScalingOperations' = (Join-Path $repositoryRoot 'processing-unit/migrations/004_scaling_operations.sql')
     'configs.grafanaDatasource' = (Join-Path $repositoryRoot 'deploy/grafana/provisioning/datasources/prometheus.yaml')
     'configs.grafanaDashboardProvider' = (Join-Path $repositoryRoot 'deploy/grafana/provisioning/dashboards/default.yml')
     'configs.grafanaStorageDashboard' = (Join-Path $repositoryRoot 'deploy/grafana/dashboards/storage.json')

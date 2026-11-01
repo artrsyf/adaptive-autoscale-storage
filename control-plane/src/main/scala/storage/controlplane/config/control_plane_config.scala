@@ -11,6 +11,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.jdk.CollectionConverters._
 import storage.controlplane.scaling.domain.{ScalingConfig, ThresholdBand}
 import storage.controlplane.systemstate.domain.SignalName
+import storage.controlplane.reconciliation.domain.{ActuationConfig, ActuationMode}
 
 final case class ServerConfig(
     listenHost: String,
@@ -75,7 +76,8 @@ final case class ControlPlaneConfig(
     api: ApiConfig,
     postgres: PostgresConfig,
     metrics: MetricsConfig,
-    scaling: ScalingConfig
+    scaling: ScalingConfig,
+    actuation: ActuationConfig
 ) {
   def validate: Either[String, ControlPlaneConfig] = {
     val sslModes = Set("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
@@ -98,7 +100,10 @@ final case class ControlPlaneConfig(
         metrics.observationWindow,
         metrics.maxSampleAge,
         metrics.retry.initialBackoff,
-        metrics.retry.maxBackoff
+        metrics.retry.maxBackoff,
+        actuation.reconcileInterval,
+        actuation.requestTimeout,
+        actuation.operationTimeout
       ).exists(_.length <= 0)
     ) Left("timeouts must be positive")
     else if (server.writeTimeout <= api.requestTimeout) Left("write timeout must exceed request timeout")
@@ -112,7 +117,7 @@ final case class ControlPlaneConfig(
     else if (metrics.retry.attempts < 1 || metrics.retry.maxBackoff < metrics.retry.initialBackoff)
       Left("invalid metrics retry configuration")
     else if (metrics.maxSampleAge < metrics.pollInterval) Left("max sample age must cover at least one poll interval")
-    else scaling.validate.map(_ => this)
+    else scaling.validate.flatMap(_ => actuation.validate).map(_ => this)
   }
 
   private def validHttpOrigin(value: String): Boolean =
@@ -149,7 +154,8 @@ object ControlPlaneConfig {
       val retry = asMap(required(metrics, "retry"), "metrics.retry")
       val scaling = asMap(required(root, "scaling"), "scaling")
       val thresholds = asMap(required(scaling, "thresholds"), "scaling.thresholds")
-      ensureKeys(root, Set("server", "api", "postgres", "metrics", "scaling"), "root")
+      val actuation = asMap(required(root, "actuation"), "actuation")
+      ensureKeys(root, Set("server", "api", "postgres", "metrics", "scaling", "actuation"), "root")
       ensureKeys(
         server,
         Set(
@@ -192,6 +198,21 @@ object ControlPlaneConfig {
         "scaling"
       )
       ensureKeys(thresholds, SignalName.policySignals.map(_.wireName), "scaling.thresholds")
+      ensureKeys(
+        actuation,
+        Set(
+          "mode",
+          "reconcile_interval",
+          "request_timeout",
+          "operation_timeout",
+          "router_url",
+          "namespace",
+          "workload_name",
+          "headless_service",
+          "application_port"
+        ),
+        "actuation"
+      )
       Right(
         ControlPlaneConfig(
           ServerConfig(
@@ -239,6 +260,22 @@ object ControlPlaneConfig {
               ensureKeys(threshold, Set("lower", "upper"), s"threshold ${signal.wireName}")
               signal -> ThresholdBand(decimal(threshold, "lower"), decimal(threshold, "upper"))
             }.toMap
+          ),
+          ActuationConfig(
+            ActuationMode
+              .parse(string(actuation, "mode"))
+              .fold(
+                message => throw new IllegalArgumentException(message),
+                identity
+              ),
+            duration(actuation, "reconcile_interval"),
+            duration(actuation, "request_timeout"),
+            duration(actuation, "operation_timeout"),
+            string(actuation, "router_url"),
+            string(actuation, "namespace"),
+            string(actuation, "workload_name"),
+            string(actuation, "headless_service"),
+            integer(actuation, "application_port")
           )
         )
       )

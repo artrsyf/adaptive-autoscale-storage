@@ -22,9 +22,10 @@
 - [Эпик 4 — наблюдающий Control Plane v1](epics/epic-4/README.md): завершённый advisory-инкремент, который агрегирует Prometheus-метрики и выдаёт объяснимые scaling decisions без изменения инфраструктуры; [validation evidence](epics/epic-4/validation.md).
   - [Планируемый change set и продолжение](epics/epic-4/changelog.md): feature-level задачи, тестовые сценарии, порядок реализации и границы следующей сессии.
 - [Эпик 5 — k3s static baseline](epics/epic-5/README.md): принятый Helm baseline с изолированным namespace, стабильной identity Processing Units и placement contract без автоматического масштабирования; clean install, upgrade/rollback, нагрузки, recovery, observability и Compose regression проверены; [валидация](epics/epic-5/validation.md).
+- [Эпик 6 — Kubernetes actuation и reconciliation](epics/epic-6/README.md): реализованный безопасный переход от advisory decision к изменению StatefulSet replicas, readiness-aware membership, runtime allocator, assignment publication и подтверждение Router topology; [change set и текущий статус](epics/epic-6/changelog.md), [k3s validation](epics/epic-6/validation.md).
 - [Каталог исследовательских эпиков](epics/planned.md): подробные задачи будущих этапов; не перечень завершённых работ.
 
-Эпик 5 завершён; базовый GitHub CI без deployment описан в [ci.md](ci.md). История завершённых инкрементов остаётся в changelog соответствующего эпика.
+Эпик 5 завершён; реализация эпика 6 начата с инфраструктурно-нейтрального allocator и Router topology status. Базовый GitHub CI без deployment описан в [ci.md](ci.md). История завершённых инкрементов и continuation notes остаются в changelog соответствующего эпика.
 
 ## Правила актуализации
 

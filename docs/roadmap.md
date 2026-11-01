@@ -14,6 +14,8 @@
 
 [Эпик 5: k3s static baseline и placement contract](epics/epic-5/README.md) завершил инфраструктурный фундамент B2 без HPA и actuator: Helm clean install/upgrade/rollback, стабильная identity, assignment bootstrap, Kubernetes-наблюдаемость, три профиля нагрузки, restart matrix, visual QA и Compose regression приняты. CPU/HPA baseline из B4 следует вводить только после явного membership/reconciliation contract: replica count сам по себе не обновляет authoritative assignment, а scale-in без draining может удалить текущего владельца partition.
 
+[Эпик 6: безопасное Kubernetes actuation и reconciliation](epics/epic-6/README.md) реализован как связующий инкремент между advisory policy и B4–B6: restart-safe operation, runtime allocator, Router topology status, нейтральный порт Processing Unit fleet, namespace-scoped Kubernetes adapter и упорядоченные протоколы scale-out/scale-in подтверждены локальным k3s циклом `3 → 4 → 3`. StatefulSet сохраняется как механизм identity; прямой HPA и сравнительный benchmark остаются следующими этапами.
+
 Номера исходных исследовательских эпиков не задают очередность разработки: наблюдаемость перенесена в текущий эпик, Kafka и кэши — после ранних исследований. Новые рабочие эпики получают собственные границы и критерии проверки в `docs/epics/`.
 
 ## Стратегия публикаций
@@ -304,6 +306,10 @@ OWNED → PREPARING → TRANSFERRING → ACTIVATING → OWNED
 ### D6. Failure Recovery
 
 Теория: crash-stop/recovery, failure detector, heartbeat, timeout, partial failure, recovery state machine, conceptual consensus/quorum/2PC.
+
+На этом этапе принимается решение о переходе Processing Unit со StatefulSet на Deployment. До D6 StatefulSet сохраняется как механизм стабильной ordinal identity и предсказуемого выбора удаляемой ноды при scale-in; локального persistent state у Processing Unit при этом нет. Переход выполняется только после D2–D3, когда реализованы partition state machine и graceful draining, и только если recovery-модель требует динамического membership с эфемерными Pod identity.
+
+До замены workload должны существовать нейтральный порт управления Processing Unit fleet, регистрация готовых экземпляров без ordinal identity, безопасное исключение конкретной ноды из assignment, восстановление assignment при смене Pod identity и адресация конкретного владельца без балансировки на произвольную реплику общего Service. Если переход не даёт измеримого преимущества для recovery или эксплуатации, StatefulSet остаётся допустимой реализацией и после D6.
 
 ---
 

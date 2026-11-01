@@ -17,7 +17,8 @@ final class ControllerService(
   def snapshot: UIO[ControllerSnapshot] = snapshotRef.get
 
   def run: UIO[Nothing] =
-    (runOnce *> ZIO.sleep(zio.Duration.fromMillis(metricsConfig.pollInterval.toMillis))).forever
+    (runOnce.catchAllCause(cause => recoverFromCycleDefect(cause)) *>
+      ZIO.sleep(zio.Duration.fromMillis(metricsConfig.pollInterval.toMillis))).forever
 
   private[service] def runOnce: UIO[Unit] =
     for {
@@ -27,6 +28,31 @@ final class ControllerService(
       finishedAt <- Clock.nanoTime
       cycleDuration = Duration.ofNanos(finishedAt - startedAt)
       _ <- snapshotRef.update(current => update(current, result, observedAt, cycleDuration))
+    } yield ()
+
+  private def recoverFromCycleDefect(cause: zio.Cause[Nothing]): UIO[Unit] =
+    for {
+      evaluatedAt <- Clock.instant
+      _ <- ZIO.logErrorCause("controller cycle terminated unexpectedly", cause)
+      _ <- snapshotRef.update { current =>
+        val insufficient = current.systemState.map { state =>
+          ScalingDecision(
+            ScalingDecisionKind.InsufficientData,
+            state.expectedNodes.size,
+            state.expectedNodes.size,
+            evaluatedAt,
+            state.assignmentEpoch,
+            Nil,
+            List("controller_cycle_failed")
+          )
+        }
+        current.copy(
+          status = ControllerStatus.Degraded,
+          decision = insufficient,
+          policyState = current.policyState.copy(pendingDirection = None, confirmationCount = 0),
+          failedCycles = current.failedCycles + 1
+        )
+      }
     } yield ()
 
   private def update(

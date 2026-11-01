@@ -9,3 +9,5 @@ data:
 {{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationMonitoring" "value" .Values.configs.migrationMonitoring) | indent 4 }}
   003_assignment.sql: |
 {{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationAssignment" "value" .Values.configs.migrationAssignment) | indent 4 }}
+  004_scaling_operations.sql: |
+{{ include "autoscale-storage.requiredConfig" (dict "name" "configs.migrationScalingOperations" "value" .Values.configs.migrationScalingOperations) | indent 4 }}

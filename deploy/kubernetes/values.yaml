@@ -20,6 +20,9 @@ router:
     className: traefik
     host: api.autoscale-storage.localhost
 
+processingUnit:
+  initialReplicas: 3
+
 storage:
   className: local-path
   postgresSize: 5Gi
@@ -35,6 +38,7 @@ configs:
   migrationDocuments: ""
   migrationMonitoring: ""
   migrationAssignment: ""
+  migrationScalingOperations: ""
   grafanaDatasource: ""
   grafanaDashboardProvider: ""
   grafanaStorageDashboard: ""

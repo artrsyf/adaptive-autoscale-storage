@@ -14,8 +14,8 @@ spec:
       annotations:
         checksum/config: {{ .Values.configs.controlPlane | sha256sum | quote }}
     spec:
-      serviceAccountName: application
-      automountServiceAccountToken: false
+      serviceAccountName: control-plane
+      automountServiceAccountToken: true
       terminationGracePeriodSeconds: 20
       securityContext:
         runAsNonRoot: true
@@ -25,7 +25,7 @@ spec:
         - name: control-plane
           image: "{{ .Values.images.controlPlane.repository }}:{{ .Values.images.controlPlane.tag }}"
           imagePullPolicy: {{ .Values.images.controlPlane.pullPolicy }}
-          args: ["--config", "/etc/storage/config.yaml", "--metrics-profile", "kubernetes"]
+          args: ["--config", "/etc/storage/config.yaml", "--metrics-profile", "kubernetes", "--actuation-mode", "kubernetes"]
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:

@@ -4,6 +4,7 @@ package app
 import (
 	assignmentclient "autoscale-distr-storage/router/internal/assignment/client/http"
 	assignmentservice "autoscale-distr-storage/router/internal/assignment/service"
+	assignmenthttp "autoscale-distr-storage/router/internal/assignment/transport/http"
 	"context"
 	"net/http"
 	"time"
@@ -75,7 +76,10 @@ func Run(configPath string) error {
 	metricsRegistry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "storage_topology_nodes", Help: "Active assignment node count."}, func() float64 { return float64(len(dynamicAssignmentService.Nodes())) }))
 	metricsRegistry.MustRegister(prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "storage_assignment_epoch", Help: "Active assignment epoch."}, func() float64 { return float64(dynamicAssignmentService.Epoch()) }))
 	documentHttpRoutes := api.NewDocumentHttpRoutes(routerConfig.API, documentRoutingService, api.NewDocumentHttpMetrics(metricsRegistry, "router", "router"))
-	return utils.ServeHTTP(routerConfig.Server, documentHttpRoutes, metricsRegistry, func(operationContext context.Context) error {
+	applicationRoutes := http.NewServeMux()
+	applicationRoutes.Handle("/topology", assignmenthttp.NewAssignmentHttpRoutes(dynamicAssignmentService))
+	applicationRoutes.Handle("/", documentHttpRoutes)
+	return utils.ServeHTTP(routerConfig.Server, applicationRoutes, metricsRegistry, func(operationContext context.Context) error {
 		return processingUnitHttpClient.Ready(operationContext, dynamicAssignmentService.Nodes())
 	})
 }

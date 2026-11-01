@@ -22,6 +22,7 @@ lazy val root = (project in file("."))
       "org.tpolecat" %% "doobie-hikari" % "1.0.0-RC12",
       "dev.zio" %% "zio-interop-cats" % "23.1.0.13",
       "org.postgresql" % "postgresql" % "42.7.10",
+      "io.kubernetes" % "client-java" % "26.0.1",
       "org.yaml" % "snakeyaml" % "2.4",
       "org.slf4j" % "slf4j-simple" % "1.7.36",
       "dev.zio" %% "zio-test" % "2.1.25" % Test,

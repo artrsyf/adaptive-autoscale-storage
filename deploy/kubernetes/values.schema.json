@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["images", "existingSecrets", "router", "storage", "configs"],
+  "required": ["images", "existingSecrets", "router", "processingUnit", "storage", "configs"],
   "properties": {
     "images": {
       "type": "object",
@@ -47,6 +47,14 @@
         }
       }
     },
+    "processingUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialReplicas"],
+      "properties": {
+        "initialReplicas": {"type": "integer", "minimum": 1}
+      }
+    },
     "storage": {
       "type": "object",
       "additionalProperties": false,
@@ -60,7 +68,7 @@
     "configs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["processingUnit", "router", "controlPlane", "load", "prometheus", "postgresExporter", "migrationDocuments", "migrationMonitoring", "migrationAssignment", "grafanaDatasource", "grafanaDashboardProvider", "grafanaStorageDashboard", "grafanaControlPlaneDashboard"],
+      "required": ["processingUnit", "router", "controlPlane", "load", "prometheus", "postgresExporter", "migrationDocuments", "migrationMonitoring", "migrationAssignment", "migrationScalingOperations", "grafanaDatasource", "grafanaDashboardProvider", "grafanaStorageDashboard", "grafanaControlPlaneDashboard"],
       "properties": {
         "processingUnit": {"type": "string"},
         "router": {"type": "string"},
@@ -71,6 +79,7 @@
         "migrationDocuments": {"type": "string"},
         "migrationMonitoring": {"type": "string"},
         "migrationAssignment": {"type": "string"},
+        "migrationScalingOperations": {"type": "string"},
         "grafanaDatasource": {"type": "string"},
         "grafanaDashboardProvider": {"type": "string"},
         "grafanaStorageDashboard": {"type": "string"},

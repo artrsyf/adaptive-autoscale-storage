@@ -48,6 +48,8 @@ Control Plane использует общий `PrometheusQuerySet`, которы
 
 Миграция создаёт исходный Compose-совместимый epoch 1. Идемпотентный bootstrap Job вызывает Assignment HTTP API и публикует epoch 2 с адресами StatefulSet. При initial install это обычный Helm resource, который запускается параллельно с workload и разрывает зависимость готовности Router от assignment; при upgrade тот же шаблон становится `post-upgrade` hook. При epoch больше 1 Job не меняет topology. Это промежуточное ограничение существующего API: пустое assignment-состояние пока не поддерживается.
 
+StatefulSet выбран для стабильной identity и индивидуальной DNS-адресации владельца partition, а не для локального хранения данных: Processing Unit не использует PVC и остаётся stateless относительно авторитетного PostgreSQL. [Эпик 6](../epic-6/README.md) сохраняет этот workload kind и закрывает инфраструктуру нейтральным портом управления fleet. Решение о переходе на Deployment отложено до D6 `Failure Recovery`, после partition state machine и graceful draining, и выполняется только при выборе динамического membership с эфемерными Pod identity.
+
 ## Состав поставки
 
 - [`deploy/kubernetes/Chart.yaml`](../../../deploy/kubernetes/Chart.yaml) определяет единый application chart; вертикальные каталоги по runtime-компонентам содержат workload/Service/RBAC по одному resource на файл, а общие templates создают ConfigMap. Карта chart находится в [`deploy/kubernetes/README.md`](../../../deploy/kubernetes/README.md);

@@ -2,11 +2,24 @@ package storage.controlplane.app
 
 import java.time.{Duration, Instant}
 
+import storage.controlplane.reconciliation.domain.{
+  FleetSnapshot,
+  ReconciliationPhase,
+  ReconciliationStatus,
+  ScalingOperation
+}
 import storage.controlplane.scaling.domain.{ControllerSnapshot, ControllerStatus, ScalingConfig, ScalingDecisionKind}
 import storage.controlplane.systemstate.domain.SignalName
 
 object ControllerMetrics {
-  def render(snapshot: ControllerSnapshot, config: ScalingConfig, now: Instant, assignmentEpoch: Long): String = {
+  def render(
+      snapshot: ControllerSnapshot,
+      config: ScalingConfig,
+      now: Instant,
+      assignmentEpoch: Long,
+      latestOperation: Option[ScalingOperation] = None,
+      fleet: Option[FleetSnapshot] = None
+  ): String = {
     val builder = new StringBuilder
     gauge(builder, "storage_assignment_epoch", "Active assignment epoch.", assignmentEpoch.toDouble)
     familyHeader(builder, "storage_control_controller_status", "Current controller status as a one-hot gauge.")
@@ -97,8 +110,136 @@ object ControllerMetrics {
         decision.recommendedReplicas
       )
     }
+    renderReconciliation(builder, latestOperation, now)
+    renderFleet(builder, snapshot, fleet)
     renderSystemState(builder, snapshot, config, now)
     builder.result()
+  }
+
+  private def renderReconciliation(
+      builder: StringBuilder,
+      latestOperation: Option[ScalingOperation],
+      now: Instant
+  ): Unit = latestOperation.foreach { operation =>
+    familyHeader(
+      builder,
+      "storage_control_reconciliation_phase",
+      "Latest reconciliation phase as a one-hot gauge."
+    )
+    ReconciliationPhase.values.foreach(phase =>
+      sample(
+        builder,
+        "storage_control_reconciliation_phase",
+        List("phase" -> phase.wireName),
+        boolean(operation.phase == phase)
+      )
+    )
+    familyHeader(
+      builder,
+      "storage_control_reconciliation_status",
+      "Latest reconciliation status as a one-hot gauge."
+    )
+    ReconciliationStatus.values.foreach(status =>
+      sample(
+        builder,
+        "storage_control_reconciliation_status",
+        List("status" -> status.wireName),
+        boolean(operation.status == status)
+      )
+    )
+    familyHeader(builder, "storage_control_reconciliation_direction", "Latest reconciliation direction.")
+    List("out", "in").foreach(direction =>
+      sample(
+        builder,
+        "storage_control_reconciliation_direction",
+        List("direction" -> direction),
+        boolean(operation.direction.toString.equalsIgnoreCase(direction))
+      )
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_source_replicas",
+      "Replica count at the start of the latest reconciliation.",
+      operation.sourceReplicas.value
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_target_replicas",
+      "Target replica count of the latest reconciliation.",
+      operation.targetReplicas.value
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_source_epoch",
+      "Assignment epoch at the start of the latest reconciliation.",
+      operation.sourceAssignmentEpoch.toDouble
+    )
+    operation.plannedAssignment.foreach(assignment =>
+      gauge(
+        builder,
+        "storage_control_reconciliation_target_epoch",
+        "Planned assignment epoch of the latest reconciliation.",
+        assignment.epoch.toDouble
+      )
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_age_seconds",
+      "Age of the latest reconciliation operation.",
+      math.max(0, Duration.between(operation.createdAt, now).toMillis).toDouble / 1000
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_duration_seconds",
+      "Elapsed duration of the latest reconciliation operation.",
+      math.max(0, Duration.between(operation.createdAt, operation.updatedAt).toMillis).toDouble / 1000
+    )
+    gauge(
+      builder,
+      "storage_control_reconciliation_waiting_for_router",
+      "Whether the latest reconciliation is waiting for Router convergence.",
+      boolean(operation.phase == ReconciliationPhase.WaitingForRouters)
+    )
+    if (operation.status == ReconciliationStatus.Succeeded)
+      gauge(
+        builder,
+        "storage_control_reconciliation_last_success_timestamp_seconds",
+        "Unix timestamp of the latest successful reconciliation.",
+        operation.updatedAt.getEpochSecond.toDouble
+      )
+  }
+
+  private def renderFleet(
+      builder: StringBuilder,
+      snapshot: ControllerSnapshot,
+      fleet: Option[FleetSnapshot]
+  ): Unit = fleet.foreach { observed =>
+    gauge(
+      builder,
+      "storage_control_fleet_desired_replicas",
+      "Desired replicas reported by the processing-unit fleet adapter.",
+      observed.desiredReplicas.value
+    )
+    gauge(
+      builder,
+      "storage_control_fleet_observed_replicas",
+      "Observed replicas reported by the processing-unit fleet adapter.",
+      observed.observedReplicas.value
+    )
+    gauge(
+      builder,
+      "storage_control_fleet_ready_replicas",
+      "Ready members reported by the processing-unit fleet adapter.",
+      observed.readyMembers.size
+    )
+    snapshot.decision.foreach(decision =>
+      gauge(
+        builder,
+        "storage_control_assignment_fleet_drift",
+        "Absolute difference between authoritative assignment nodes and desired fleet replicas.",
+        math.abs(decision.currentReplicas - observed.desiredReplicas.value)
+      )
+    )
   }
 
   private def renderSystemState(
